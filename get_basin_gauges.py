@@ -6,6 +6,7 @@ import ulmo
 import hydrofunctions as hf
 from hydrofunctions.exceptions import HydroNoDataError
 
+
 def get_json_site_param(huc, param):
     # get all the sites in the huc
     sites_in_huc, data = get_sites_in_basin(huc)
@@ -28,7 +29,7 @@ def get_json_site_param(huc, param):
     return data
 
 
-def get_nldi_data(huc):
+def get_nldi_huc_data(huc):
     url = "https://cida.usgs.gov/nldi/huc12pp/{}/navigate/UT/nwissite".format(huc)
     r = requests.get(url)
     json_content = json.loads(r.content)
@@ -36,7 +37,7 @@ def get_nldi_data(huc):
 
 
 def get_sites_in_basin(huc):
-    data = get_nldi_data(huc)
+    data = get_nldi_huc_data(huc)
     sites = data['features']
     site_nums = []
     for s in sites:
