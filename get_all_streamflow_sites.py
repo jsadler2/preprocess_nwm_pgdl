@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import pandas as pd
-from utils import get_sites_with_param
 import ulmo
 
 def get_all_streamflow_sites():
@@ -9,7 +8,6 @@ def get_all_streamflow_sites():
     d = []
     for huc in hucs:
         sites_with_param = ulmo.usgs.nwis.get_sites(huc=huc, service='iv', parameter_code="00060")
-        # sites = get_sites_with_param(huc, param="00060")
         df = pd.DataFrame(sites_with_param)
         d.append(df.T)
 
@@ -31,6 +29,7 @@ def merge_fips(df):
     df = df.merge(df_fips, left_on='state_code', right_on='code')
     return df
 
-df = pd.read('all_streamflow_sites_CONUS.csv')
+# df = pd.read('all_streamflow_sites_CONUS.csv')
 # d_combined.plot.scatter('longitude', 'latitude')
 # plt.show()
+get_all_streamflow_sites()
