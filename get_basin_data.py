@@ -1,4 +1,5 @@
 # coding: utf-8
+import pandas as pd
 import json
 import ulmo
 import hydrofunctions as hf
@@ -39,22 +40,24 @@ def get_data_from_sites(sites, service, parameter_code, start_date, end_date):
             site_data_df = site_data.get_data().df()
             data_sites.append(site_data_df)
             sites_with_param.append(site)
+            print('got data for {} ', site)
         except HydroNoDataError:
             print("no data for {}".format(site))
-    return data_sites
+    data_from_sites_combined = pd.concat(data_sites, axis=1)
+    return data_from_sites_combined
 
 
 def get_data_for_huc(huc, param, start_date, end_date, service='dv'):
     huc_site_list, data = get_sites_in_basin(huc)
-    data = get_data_from_sites(huc_site_list, service, param, start_date,
-                               end_date)
-    return data
+    site_data = get_data_from_sites(huc_site_list, service, param, start_date,
+                                    end_date)
+    return site_data
 
 
 # get all sites for a HUC 12
-huc = "020402060105"
-
-parameter_code = "00060"
-start_date = "2018-01-01"
-end_date = "2019-01-10"
-service = 'dv'
+# huc = "020402060105"
+#
+# parameter_code = "00060"
+# start_date = "2018-01-01"
+# end_date = "2019-01-10"
+# service = 'dv'
