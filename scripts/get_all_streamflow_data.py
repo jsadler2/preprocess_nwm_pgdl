@@ -8,7 +8,7 @@ import datetime
 
 
 def get_sites_for_huc2(huc2):
-    df = pd.read_csv('all_streamflow_sites_CONUS.csv',
+    df = pd.read_csv('../data/all_streamflow_sites_CONUS.csv',
                      dtype={'huc': str, 'code': str})
     df_for_huc2 = df[df['huc'].str.startswith(huc2)]
     sites_for_huc2 = df_for_huc2['code']
@@ -35,6 +35,7 @@ def get_all_streamflow_data_for_huc2(huc2, output_zarr, num_sites_per_chunk=5,
 
     # loop through site_code_chunks
     for site_chunk in site_codes_chunked:
+        streamflow_df_sites = None
         try:
             streamflow_df_sites = get_streamflow_data(site_chunk,
                                                       start_date_all,
@@ -43,7 +44,7 @@ def get_all_streamflow_data_for_huc2(huc2, output_zarr, num_sites_per_chunk=5,
                                                       time_scale)
         except json.decoder.JSONDecodeError:
             continue
-        if streamflow_df_sites:
+        if streamflow_df_sites is not None:
             append_to_zarr(streamflow_df_sites, output_zarr)
 
 
@@ -203,10 +204,3 @@ def nwis_json_to_df(json_data, start_date, end_date, time_scale='H'):
     else:
         return None
 
-
-hucs = [f'{h:02}' for h in range(1, 19)]
-if __name__ == '__main__':
-    get_all_streamflow_data_for_huc2('02',
-                                     "E:\\data\\streamflow_data\\"
-                                     "discharge_data_02",
-                                     num_sites_per_chunk=3)
