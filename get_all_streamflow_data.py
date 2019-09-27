@@ -23,7 +23,8 @@ def divide_chunks(l, n):
 
 def get_all_streamflow_data_for_huc2(huc2, output_zarr, num_sites_per_chunk=5,
                                      start_date_all="1970-01-01",
-                                     end_date_all='2019-01-01'):
+                                     end_date_all='2019-01-01', product='iv',
+                                     time_scale='H'):
     """
     gets all streamflow data for a date range for a given huc2. Calls are 
     chunked by station
@@ -37,7 +38,9 @@ def get_all_streamflow_data_for_huc2(huc2, output_zarr, num_sites_per_chunk=5,
     for site_chunk in site_codes_chunked:
         streamflow_df_sites = get_streamflow_data(site_chunk,
                                                   start_date_all,
-                                                  end_date_all)
+                                                  end_date_all,
+                                                  product,
+                                                  time_scale)
         append_to_zarr(streamflow_df_sites, output_zarr)
 
 
@@ -66,27 +69,27 @@ def append_to_zarr(streamflow_df, output_zarr):
     ds.to_zarr(output_zarr, append_dim='site_code', mode='a')
 
 
-def get_streamflow_data(sites, start_date, end_date):
-    response = call_nwis_service(sites, start_date, end_date)
+def get_streamflow_data(sites, start_date, end_date, product, time_scale):
+    response = call_nwis_service(sites, start_date, end_date, product)
     data = json.loads(response.text)
-    streamflow_df = nwis_json_to_df(data, start_date, end_date)
+    streamflow_df = nwis_json_to_df(data, start_date, end_date, time_scale)
     return streamflow_df
 
 
-def call_nwis_service(sites, start_date, end_date):
+def call_nwis_service(sites, start_date, end_date, product):
     """
     gets the data for a list of sites from a start date to an end date
     """
-    base_url = "http://waterservices.usgs.gov/nwis/iv/?format=json&sites={}&" \
+    base_url = "http://waterservices.usgs.gov/nwis/{}/?format=json&sites={}&" \
                "startDT={}&endDT={}&parameterCd=00060&siteStatus=all"
-    url = base_url.format(",".join(sites), start_date, end_date)
+    url = base_url.format(product, ",".join(sites), start_date, end_date)
     request_start_time = datetime.datetime.now()
     print(f"starting request for sites {sites} at {request_start_time}, "
-          f"for period {start_date} to {end_date}")
+          f"for period {start_date} to {end_date}", flush=True)
     r = requests.get(url)
     request_end_time = datetime.datetime.now()
     request_time = request_end_time - request_start_time
-    print(f"took {request_time} to get data for huc {sites}")
+    print(f"took {request_time} to get data for huc {sites}", flush=True)
     return r
 
 
@@ -121,10 +124,13 @@ def delete_non_approved_data(df):
     # first I have to get the actual qualifiers. originally, these are lists
     # in a column in the df (e.g., [A, [91]]
     # todo: what does the number mean (i.e., [91])
-    qualifier_df = pd.DataFrame(df['qualifiers'].to_list(),
-                                columns=['qualifier_code', 'number'],
-                                index=df.index)
-    approved_indices = (qualifier_df['qualifier_code'] == 'A')
+    qualifiers_list = df['qualifiers'].to_list()
+    qualifiers = [q[0] for q in qualifiers_list]
+    # check qualifier's list
+    if qualifiers[0] not in ['A', 'P']:
+        print("we have a weird qualifier. it is ", qualifiers[0])
+    qualifier_ser = pd.Series(qualifiers, index=df.index)
+    approved_indices = (qualifier_ser == 'A')
     approved_df = df[approved_indices]
     return approved_df
 
@@ -177,7 +183,7 @@ def nwis_json_to_df(json_data, start_date, end_date, time_scale='H'):
     time_series = json_data['value']['timeSeries']
     for ts in time_series:
         site_code = ts['sourceInfo']['siteCode'][0]['value']
-        print('processing the data for site ', site_code)
+        print('processing the data for site ', site_code, flush=True)
         # this is where the actual data is
         ts_data = ts['values'][0]['value']
         if ts_data:
@@ -198,4 +204,4 @@ if __name__ == '__main__':
     get_all_streamflow_data_for_huc2('02',
                                      "E:\\data\\streamflow_data\\"
                                      "discharge_data_02",
-                                     num_sites_per_chunk=5)
+                                     num_sites_per_chunk=1)
