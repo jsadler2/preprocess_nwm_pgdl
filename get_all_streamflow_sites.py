@@ -2,12 +2,14 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import ulmo
 
-def get_all_streamflow_sites():
+
+def get_all_streamflow_sites(product):
     hucs = [f'{h:02}' for h in range(1, 19)]
     print ( hucs )
     d = []
     for huc in hucs:
-        sites_with_param = ulmo.usgs.nwis.get_sites(huc=huc, service='iv', parameter_code="00060")
+        sites_with_param = ulmo.usgs.nwis.get_sites(huc=huc, service=product,
+                                                    parameter_code="00060")
         df = pd.DataFrame(sites_with_param)
         d.append(df.T)
 
@@ -19,7 +21,7 @@ def get_all_streamflow_sites():
     d_combined['latitude'] = pd.to_numeric(d_combined['latitude'])
     d_combined['longitude'] = pd.to_numeric(d_combined['longitude'])
 
-    d_combined.to_csv('all_streamflow_sites_CONUS.csv')
+    d_combined.to_csv(f'all_streamflow_sites_CONUS_{product}.csv')
 
 
 def merge_fips(df):
@@ -32,4 +34,5 @@ def merge_fips(df):
 # df = pd.read('all_streamflow_sites_CONUS.csv')
 # d_combined.plot.scatter('longitude', 'latitude')
 # plt.show()
-get_all_streamflow_sites()
+# get_all_streamflow_sites('iv')
+get_all_streamflow_sites('dv')
