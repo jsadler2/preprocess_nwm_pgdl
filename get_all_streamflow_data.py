@@ -30,28 +30,32 @@ def get_all_streamflow_data_for_huc2(huc2, output_zarr, num_sites_per_chunk=5,
     chunked by station
     """
     site_codes_in_huc2 = get_sites_for_huc2(huc2)
-    start_index = get_last_site_code_position(output_zarr, site_codes_in_huc2)
-    site_codes_chunked = divide_chunks(site_codes_in_huc2[start_index:],
-                                       num_sites_per_chunk)
+    not_done_sites = get_sites_not_done(output_zarr, site_codes_in_huc2)
+    site_codes_chunked = divide_chunks(not_done_sites, num_sites_per_chunk)
 
     # loop through site_code_chunks
     for site_chunk in site_codes_chunked:
-        streamflow_df_sites = get_streamflow_data(site_chunk,
-                                                  start_date_all,
-                                                  end_date_all,
-                                                  product,
-                                                  time_scale)
-        append_to_zarr(streamflow_df_sites, output_zarr)
+        try:
+            streamflow_df_sites = get_streamflow_data(site_chunk,
+                                                      start_date_all,
+                                                      end_date_all,
+                                                      product,
+                                                      time_scale)
+        except json.decoder.JSONDecodeError:
+            continue
+        if streamflow_df_sites:
+            append_to_zarr(streamflow_df_sites, output_zarr)
 
 
-def get_last_site_code_position(output_zarr, all_site_codes):
+def get_sites_not_done(output_zarr, all_site_codes):
     # check if zarr dataset exists
     if os.path.exists(output_zarr):
         # read zarr
         ds = xr.open_zarr(output_zarr)
         site_codes = ds['site_code']
-        last_site_code = str(site_codes[-1].values)
-        return all_site_codes.index(last_site_code) + 1
+        is_done = np.isin(all_site_codes, site_codes)
+        all_array = np.array(all_site_codes)
+        return all_array[~is_done]
     else:
         return 0
 
@@ -72,7 +76,8 @@ def append_to_zarr(streamflow_df, output_zarr):
 def get_streamflow_data(sites, start_date, end_date, product, time_scale):
     response = call_nwis_service(sites, start_date, end_date, product)
     data = json.loads(response.text)
-    streamflow_df = nwis_json_to_df(data, start_date, end_date, time_scale)
+    streamflow_df = nwis_json_to_df(data, start_date, end_date,
+                                    time_scale)
     return streamflow_df
 
 
@@ -204,4 +209,4 @@ if __name__ == '__main__':
     get_all_streamflow_data_for_huc2('02',
                                      "E:\\data\\streamflow_data\\"
                                      "discharge_data_02",
-                                     num_sites_per_chunk=1)
+                                     num_sites_per_chunk=3)
