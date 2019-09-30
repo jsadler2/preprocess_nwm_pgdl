@@ -1,4 +1,4 @@
-from get_all_streamflow_data import get_all_streamflow_data_for_huc2
+from streamflow_data_retrival import get_all_streamflow_data_for_huc2
 import datetime
 
 hucs = [f'{h:02}' for h in range(1, 19)]
@@ -7,7 +7,7 @@ for huc in hucs:
                                      f"discharge_data_{huc}_daily",
                                      num_sites_per_chunk=10, product='dv',
                                      time_scale='D')
-    with open(f'../data/daily_discharge/indicator_{huc}', 'w') as f:
+    with open(f'../data/daily_discharge/indicator_{huc}.txt', 'w') as f:
         f.write(f'successfully pulled daily discharge data for {huc} \n')
         f.write(str(datetime.datetime.now()))
 
