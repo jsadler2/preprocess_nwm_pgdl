@@ -1,7 +1,7 @@
 from streamflow_data_retrival import get_all_streamflow_data_for_huc2
 import datetime
+from utils import hucs
 
-hucs = [f'{h:02}' for h in range(1, 19)]
 for huc in hucs:
     get_all_streamflow_data_for_huc2(huc, "E:\\data\\streamflow_data\\"
                                      f"discharge_data_{huc}_daily",
