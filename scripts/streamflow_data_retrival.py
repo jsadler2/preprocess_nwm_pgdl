@@ -5,21 +5,16 @@ import numpy as np
 import json
 import requests
 import datetime
+from utils import divide_chunks, get_sites_not_done
 
 
-def get_sites_for_huc2(huc2):
-    df = pd.read_csv('../data/all_streamflow_sites_CONUS.csv',
-                     dtype={'huc': str, 'code': str})
-    df_for_huc2 = df[df['huc'].str.startswith(huc2)]
-    sites_for_huc2 = df_for_huc2['code']
+def get_sites_for_huc2(huc2, product):
+    df = pd.read_csv(f'../data/all_streamflow_sites_CONUS_{product}.csv',
+                     dtype={'huc_cd': str, 'site_no': str})
+    df_for_huc2 = df[df['huc_cd'].str.startswith(huc2)]
+    sites_for_huc2 = df_for_huc2['site_no']
     return sites_for_huc2.to_list()
 
-
-def divide_chunks(l, n): 
-    # looping till length l 
-    for i in range(0, len(l), n):  
-        yield l[i:i + n] 
-  
 
 def get_all_streamflow_data_for_huc2(huc2, output_zarr, num_sites_per_chunk=5,
                                      start_date_all="1970-01-01",
@@ -29,8 +24,9 @@ def get_all_streamflow_data_for_huc2(huc2, output_zarr, num_sites_per_chunk=5,
     gets all streamflow data for a date range for a given huc2. Calls are 
     chunked by station
     """
-    site_codes_in_huc2 = get_sites_for_huc2(huc2)
-    not_done_sites = get_sites_not_done(output_zarr, site_codes_in_huc2)
+    site_codes_in_huc2 = get_sites_for_huc2(huc2, product)
+    not_done_sites = get_sites_not_done(output_zarr, site_codes_in_huc2,
+                                        'site_code')
     site_codes_chunked = divide_chunks(not_done_sites, num_sites_per_chunk)
 
     # loop through site_code_chunks
@@ -46,19 +42,6 @@ def get_all_streamflow_data_for_huc2(huc2, output_zarr, num_sites_per_chunk=5,
             continue
         if streamflow_df_sites is not None:
             append_to_zarr(streamflow_df_sites, output_zarr)
-
-
-def get_sites_not_done(output_zarr, all_site_codes):
-    # check if zarr dataset exists
-    if os.path.exists(output_zarr):
-        # read zarr
-        ds = xr.open_zarr(output_zarr)
-        site_codes = ds['site_code']
-        is_done = np.isin(all_site_codes, site_codes)
-        all_array = np.array(all_site_codes)
-        return all_array[~is_done]
-    else:
-        return 0
 
 
 def convert_df_to_dataset(streamflow_df):
