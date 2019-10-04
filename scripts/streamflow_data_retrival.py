@@ -5,15 +5,7 @@ import numpy as np
 import json
 import requests
 import datetime
-from utils import divide_chunks, get_sites_not_done
-
-
-def get_sites_for_huc2(huc2, product):
-    df = pd.read_csv(f'../data/all_streamflow_sites_CONUS_{product}.csv',
-                     dtype={'huc_cd': str, 'site_no': str})
-    df_for_huc2 = df[df['huc_cd'].str.startswith(huc2)]
-    sites_for_huc2 = df_for_huc2['site_no']
-    return sites_for_huc2.to_list()
+from utils import divide_chunks, get_sites_not_done, get_sites_for_huc2
 
 
 def get_all_streamflow_data_for_huc2(huc2, output_zarr, num_sites_per_chunk=5,
