@@ -1,11 +1,13 @@
-name: nwm
+name: nwm1
 channels:
   - conda-forge
   - defaults
   - bioconda
 dependencies:
+  - python=3.7
   - dask
   - dask-core
+  - lxml
   - netcdf4
   - numpy
   - pandas
@@ -13,6 +15,7 @@ dependencies:
   - pytz
   - snakemake-minimal
   - xarray=0.12.2
+  - zarr
   - pip:
-      git+https://github.com/pydap/pydap.git@master
+      git+https://github.com/pydap/pydap.git
 
