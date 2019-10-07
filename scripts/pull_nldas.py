@@ -1,7 +1,9 @@
 from pydap.client import open_url
 from pydap.cas.urs import setup_session
+import pandas as pd
 import xarray as xr
 import time
+from utils import get_indices_done_zarr
 
 username = 'jsadler'
 password = 'rmX9YgFpxetSoyuxo1Dv'
@@ -9,6 +11,7 @@ all_variables = ['apcpsfc', 'cape180_0mb', 'convfracsfc', 'dlwrfsfc',
                  'dswrfsfc', 'pevapsfc', 'pressfc', 'spfh2m', 'tmp2m',
                  'ugrd10m', 'vgrd10m']
 
+minimum_date = "1979-01-01 13:00"
 
 def contruct_nldas_url(start_long=1, end_long=463, start_lat=1,
                        end_lat=223, start_time=1, end_time=357168,
@@ -35,14 +38,27 @@ def contruct_nldas_url(start_long=1, end_long=463, start_lat=1,
     return url
 
 
-def nldas_to_zarr():
+def max_num_dates_done(zarr_store):
+    ds = xr.open_zarr(zarr_store)
+    t = ds['time']
+    return len(t)
+
+
+def get_total_time_steps(end_date ='2019-01-01'):
+    date_range = pd.date_range(start=minimum_date, end_date, freq='H')
+    return(len(date_range))
+
+def nldas_to_zarr(zarr_store, end_date, time_pull_size=960):
+    num_total_dt_steps = range(get_total_time_steps)
+    max_date_num = max_num_dates_done(zarr_store)
+
+
     dataset_url = contruct_nldas_url(end_time=960)
-    print(dataset_url)
     session = setup_session(username, password, check_url=dataset_url)
 
     start_time = time.time()
     store = xr.backends.PydapDataStore.open(dataset_url, session=session)
-    ds = xr.open_dataset(store).chunk({'lat':56, 'lon': 116, 'time': 480})
+    ds = xr.open_dataset(store).chunk({'lat':224, 'lon': 464, 'time': 481})
     ds.to_zarr('test_nldas', mode='w')
     end_time = time.time()
 
