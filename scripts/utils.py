@@ -68,40 +68,40 @@ def divide_chunks(l, n):
         yield l[i:i + n] 
 
 
-def get_sites_done_zarr(output_zarr, zarr_dim_name):
+def get_indices_done_zarr(output_zarr, zarr_dim_name):
     ds = xr.open_zarr(output_zarr)
-    site_codes = ds[zarr_dim_name]
-    return site_codes
+    indices = ds[zarr_dim_name]
+    return indices
 
 
-def get_sites_done_csv(output_file, dim_name):
+def get_indices_done_csv(output_file, dim_name):
     with open(output_file, 'r') as f:
         df = pd.read_csv(output_file, dtype={dim_name: str})
         return df[dim_name]
 
 
-def get_sites_not_done(output_file, all_sites, dim_name, file_type):
+def get_indices_not_done(output_file, all_indices, dim_name, file_type):
     # check if zarr dataset exists
     if os.path.exists(output_file):
-        # get the sites that are done
+        # get the indices that are done
         if file_type=='zarr':
-            sites_done = get_sites_done_zarr(output_file, dim_name)
+            indices_done = get_indices_done_zarr(output_file, dim_name)
         elif file_type=='csv':
-            sites_done = get_sites_done_csv(output_file, dim_name)
+            indices_done = get_indices_done_csv(output_file, dim_name)
         else:
             raise ValueError(f'Filetype {file_type} not valid.'
                              f'Should be zarr or csv')
         # get their indices
-        is_done_idx = np.isin(all_sites, sites_done)
-        all_array = np.array(all_sites)
+        is_done_idx = np.isin(all_indices, indices_done)
+        all_array = np.array(all_indices)
         return all_array[~is_done_idx]
     else:
-        return all_sites
+        return all_indices
 
   
 def get_nldi_data_huc2(identifiers, out_file, get_one_func, identifier_name,
                        out_file_type='zarr'):
-    not_done_identifiers = get_sites_not_done(out_file, identifiers,
+    not_done_identifiers = get_indices_not_done(out_file, identifiers,
                                               identifier_name, out_file_type)
     chunk_size = 20
     chunked_list = divide_chunks(not_done_identifiers, chunk_size)
