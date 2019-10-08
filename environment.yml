@@ -13,6 +13,7 @@ dependencies:
   - pandas
   - pip
   - pytz
+  - s3fs
   - snakemake-minimal
   - xarray=0.12.2
   - zarr
