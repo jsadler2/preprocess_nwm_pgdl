@@ -38,26 +38,27 @@ def get_undone_range(zarr_store, time_pull_size, end_date):
 
 
 def nldas_to_zarr(zarr_store, urs_user, urs_pass, end_date="2019-01-01",
-                  time_pull_size=10):
+                  time_pull_size=10, lat_chunk=224, lon_chunk=464,
+                  time_chunk=480):
     session = setup_session(urs_pass, urs_user, check_url=base_url)
 
-    start_request_time = time.time()
     store = xr.backends.PydapDataStore.open(base_url, session=session)
-    ds = xr.open_dataset(store).chunk({'lat': 224, 'lon': 464,
-                                       'time': 480})
+    chunks = {'lat': lat_chunk, 'lon': lon_chunk, 'time': time_chunk}
+    ds = xr.open_dataset(store).chunk(chunks)
 
     undone_range = get_undone_range(zarr_store, time_pull_size, end_date)
-    j = 0
     for i in undone_range:
-        if j < 3:
-            start_date_num = i - 1
-            end_date_num = i + time_pull_size - 1
-            time_slice = slice(start_date_num, end_date_num, 1)
-            ds_sliced = ds.isel(time=time_slice)
-            ds_sliced.to_zarr(zarr_store, mode='a', append_dim='time')
-            end_request_time = time.time()
-            print("time elapsed", (end_request_time - start_request_time))
-            j += 1
+        start_date_num = i - 1
+        end_date_num = i + time_pull_size - 1
+        time_slice = slice(start_date_num, end_date_num, 1)
+        start_request_time = time.time()
+        print(f"getting data for time {start_date_num} to {end_date_num}",
+              flush=True)
+        ds_sliced = ds.isel(time=time_slice)
+        ds_sliced.to_zarr(zarr_store, mode='a', append_dim='time')
+        end_request_time = time.time()
+        print("time elapsed", (end_request_time - start_request_time),
+              flush=True)
 
 
 def get_urs_pass_user(netrc_file):
@@ -65,7 +66,7 @@ def get_urs_pass_user(netrc_file):
 
     :param netrc_file: this is a path to a file that contains the urs username
     and password in the .netrc format
-    :return: [tuple] (user_id, password)
+    :return: [tuple] (user_name, password)
     """
     with open(netrc_file, 'r') as f:
         text = f.read()
@@ -82,8 +83,9 @@ def get_urs_pass_user(netrc_file):
 
 
 if __name__ == '__main__':
-    netrc_file = 'C:\\Users\\jsadler\\.netrc'
-    username, password = get_urs_pass_user(netrc_file)
-    nldas_to_zarr('test_append_nldas', password, username, time_pull_size=10)
+    netrc = 'C:\\Users\\jsadler\\.netrc'
+    username, password = get_urs_pass_user(netrc)
+    zarr_data_store = f'E:\\data\\nldas\\nldas'
+    nldas_to_zarr(zarr_data_store, password, username, time_pull_size=479)
 
 
