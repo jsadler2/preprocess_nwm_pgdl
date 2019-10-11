@@ -5,35 +5,79 @@ import numpy as np
 import json
 import requests
 import datetime
-from utils import divide_chunks, get_sites_not_done, get_sites_for_huc2
+from utils import divide_chunks, get_indices_not_done, get_sites_for_huc2, \
+    append_to_csv_column_wise
 
 
-def get_all_streamflow_data_for_huc2(huc2, output_zarr, num_sites_per_chunk=5,
-                                     start_date_all="1970-01-01",
-                                     end_date_all='2019-01-01', product='iv',
-                                     time_scale='H'):
+def get_all_streamflow_data_for_huc2(huc2, output_file, num_sites_per_chunk=5,
+                                     start_date="1970-01-01",
+                                     end_date='2019-01-01', time_scale='H',
+                                     output_format='zarr'):
     """
-    gets all streamflow data for a date range for a given huc2. Calls are 
+    gets all streamflow data for a date range for a given huc2. Calls are
     chunked by station
+
+    :param huc2: str - zero-padded huc 2 (e.g., "02")
+    :param output_file: str - path to the csv file or zarr store where the data
+    will be stored
+    :param num_sites_per_chunk: int - the number of sites that will be pulled
+    at in each web service call
+    :param start_date: str - the start date of when you want the data for
+    (e.g., "1980-01-01")
+    :param end_date: str - the end date of when you want the data for
+    (e.g., "1990-01-01")
+    :param time_scale: str - Pandas like time string for the time scale at which
+    the data will be aggregated (e.g., 'H' for hour or 'D' for daily)
+    :param output_format: str - the format of the output file. 'csv' or 'zarr'
+    :return: None
     """
+    product = get_product_from_time_scale(time_scale)
     site_codes_in_huc2 = get_sites_for_huc2(huc2, product)
-    not_done_sites = get_sites_not_done(output_zarr, site_codes_in_huc2,
-                                        'site_code')
+    not_done_sites = get_indices_not_done(output_file, site_codes_in_huc2,
+                                          'site_code', output_format)
     site_codes_chunked = divide_chunks(not_done_sites, num_sites_per_chunk)
 
     # loop through site_code_chunks
+    chunk_dfs = []
     for site_chunk in site_codes_chunked:
         streamflow_df_sites = None
+        # catch if there is a problem on the server retrieving the data
         try:
             streamflow_df_sites = get_streamflow_data(site_chunk,
-                                                      start_date_all,
-                                                      end_date_all,
+                                                      start_date,
+                                                      end_date,
                                                       product,
                                                       time_scale)
         except json.decoder.JSONDecodeError:
             continue
         if streamflow_df_sites is not None:
-            append_to_zarr(streamflow_df_sites, output_zarr)
+            chunk_dfs.append(streamflow_df_sites)
+    all_chunks_df = pd.concat(chunk_dfs, axis=1)
+
+    # write the data out to the output file
+    if output_format == 'zarr':
+        append_to_zarr(all_chunks_df, output_file)
+    elif output_format == 'csv':
+        append_to_csv_column_wise(all_chunks_df, output_file)
+    else:
+        raise ValueError("output_format should be 'csv' or 'zarr'")
+
+
+def get_product_from_time_scale(time_scale):
+    """
+    get the the USGS nwis product that is appropriate for the time scale
+    :param time_scale: str - Pandas like time string for the time scale at which
+    the data will be aggregated (e.g., 'H' for hour or 'D' for daily)
+    :return:
+    """
+    iv_scales = ['15T', 'T', 'H']
+    dv_scale = ['D']
+    if time_scale in iv_scales:
+        return 'iv'
+    elif time_scale in dv_scale:
+        return 'dv'
+    else:
+        raise ValueError("time scale must be '15T', 'T', 'H', or 'D'")
 
 
 def convert_df_to_dataset(streamflow_df):
@@ -178,4 +222,3 @@ def nwis_json_to_df(json_data, start_date, end_date, time_scale='H'):
         return df_combined
     else:
         return None
-
