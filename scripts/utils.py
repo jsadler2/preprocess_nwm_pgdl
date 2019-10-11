@@ -64,8 +64,8 @@ def get_sites_in_basin(huc):
 
 def divide_chunks(l, n):
     # looping till length l 
-    for i in range(0, len(l), n):  
-        yield l[i:i + n] 
+    for i in range(0, len(l), n):
+        yield l[i:i + n]
 
 
 def get_indices_done_zarr(output_zarr, zarr_dim_name):
@@ -74,20 +74,34 @@ def get_indices_done_zarr(output_zarr, zarr_dim_name):
     return indices
 
 
-def get_indices_done_csv(output_file, dim_name):
+def get_indices_done_csv(output_file, dim_name, is_column):
+    """
+    get the indices that are done in the data pulling
+    :param output_file: the file that the data will be stored in
+    :param dim_name: the dimension name if it's a column
+    :param is_column: whether the index is stored in a column. otherwise it is
+    assumed that the index is the columns themselves (i.e., you are appending
+    to the file columnwise)
+    :return: a array-like containing the indices that have already been pulled
+    """
     with open(output_file, 'r') as f:
         df = pd.read_csv(output_file, dtype={dim_name: str})
-        return df[dim_name]
+        if is_column:
+            return df[dim_name]
+        else:
+            return df.columns
 
 
-def get_indices_not_done(output_file, all_indices, dim_name, file_type):
+def get_indices_not_done(output_file, all_indices, dim_name, file_type,
+                         is_column=True):
     # check if zarr dataset exists
     if os.path.exists(output_file):
         # get the indices that are done
-        if file_type=='zarr':
+        if file_type == 'zarr':
             indices_done = get_indices_done_zarr(output_file, dim_name)
-        elif file_type=='csv':
-            indices_done = get_indices_done_csv(output_file, dim_name)
+        elif file_type == 'csv':
+            indices_done = get_indices_done_csv(output_file, dim_name,
+                                                is_column)
         else:
             raise ValueError(f'Filetype {file_type} not valid.'
                              f'Should be zarr or csv')
@@ -98,11 +112,11 @@ def get_indices_not_done(output_file, all_indices, dim_name, file_type):
     else:
         return all_indices
 
-  
+
 def get_nldi_data_huc2(identifiers, out_file, get_one_func, identifier_name,
                        out_file_type='zarr'):
     not_done_identifiers = get_indices_not_done(out_file, identifiers,
-                                              identifier_name, out_file_type)
+                                                identifier_name, out_file_type)
     chunk_size = 20
     chunked_list = divide_chunks(not_done_identifiers, chunk_size)
     for chunk in chunked_list:
@@ -125,7 +139,7 @@ def get_nldi_data_huc2(identifiers, out_file, get_one_func, identifier_name,
         if out_file_type == 'zarr':
             append_to_zarr(df_combined, out_file, identifier_name)
         elif out_file_type == 'csv':
-            append_to_csv(df_combined, out_file)
+            append_to_csv_row_wise(df_combined, out_file)
 
 
 def append_to_zarr(df, out_zarr_file, append_dim):
@@ -133,7 +147,7 @@ def append_to_zarr(df, out_zarr_file, append_dim):
     ds.to_zarr(out_zarr_file, mode='a', append_dim=append_dim)
 
 
-def append_to_csv(df, out_csv_file):
+def append_to_csv_row_wise(df, out_csv_file):
     file_exists = os.path.exists(out_csv_file)
     write_header = not file_exists
     if file_exists:
@@ -143,6 +157,16 @@ def append_to_csv(df, out_csv_file):
     df.to_csv(out_csv_file, mode='a', header=write_header)
 
 
+def append_to_csv_column_wise(df, out_csv_file):
+    file_exists = os.path.exists(out_csv_file)
+    if file_exists:
+        # make sure the new data is matching the data in the csv
+        df_old = pd.read_csv(out_csv_file)
+        df_old[df.columns] = df[df.columns]
+        df = df_old.copy()
+    df.to_csv(out_csv_file, mode='w')
+
+
 def get_csv_columns(out_csv_file):
     with open(out_csv_file, 'r') as f:
         first_line = f.readline()
@@ -150,6 +174,3 @@ def get_csv_columns(out_csv_file):
     column_names = first_line.split(',')[1:]
     cleaned_names = [n.strip() for n in column_names]
     return cleaned_names
-
-
-
