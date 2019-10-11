@@ -3,11 +3,6 @@ from pydap.cas.urs import setup_session
 import pandas as pd
 import xarray as xr
 import time
-from utils import get_indices_done_zarr, divide_chunks
-
-all_variables = ['apcpsfc', 'cape180_0mb', 'convfracsfc', 'dlwrfsfc',
-                 'dswrfsfc', 'pevapsfc', 'pressfc', 'spfh2m', 'tmp2m',
-                 'ugrd10m', 'vgrd10m']
 
 minimum_date = "1979-01-01 13:00"
 base_url = 'https://hydro1.sci.gsfc.nasa.gov/dods/NLDAS_FORA0125_H.002?'
@@ -38,8 +33,22 @@ def get_undone_range(zarr_store, time_pull_size, end_date):
 
 
 def nldas_to_zarr(zarr_store, urs_user, urs_pass, end_date="2019-01-01",
-                  time_pull_size=10, lat_chunk=224, lon_chunk=464,
+                  time_pull_size=959, lat_chunk=224, lon_chunk=464,
                   time_chunk=480):
+    """
+    pull data from nldas and put into a zarr store for of CONUS
+    :param zarr_store: [str] the path to the zarr store to which the data will
+    be written
+    :param urs_user: [str] the urs username
+    :param urs_pass: [str] the urs password
+    :param end_date: [str] date until which the data should be pulled
+    :param time_pull_size: [int] the number of dates that should be pulled and
+    written to zarr at a time
+    :param lat_chunk: [int] the zarr chunk size for the lat dimension
+    :param lon_chunk: [int] the zarr chunk size for the lon dimension
+    :param time_chunk: [int] the zarr chunk size for the time dimension
+    :return: None
+    """
     session = setup_session(urs_pass, urs_user, check_url=base_url)
 
     store = xr.backends.PydapDataStore.open(base_url, session=session)
@@ -63,7 +72,7 @@ def nldas_to_zarr(zarr_store, urs_user, urs_pass, end_date="2019-01-01",
 
 def get_urs_pass_user(netrc_file):
     """
-
+    retrieve the urs password and username from a .netrc file
     :param netrc_file: this is a path to a file that contains the urs username
     and password in the .netrc format
     :return: [tuple] (user_name, password)
@@ -85,7 +94,7 @@ def get_urs_pass_user(netrc_file):
 if __name__ == '__main__':
     netrc = 'C:\\Users\\jsadler\\.netrc'
     username, password = get_urs_pass_user(netrc)
-    zarr_data_store = f'E:\\data\\nldas\\nldas'
+    zarr_data_store = f'nldas'
     nldas_to_zarr(zarr_data_store, password, username, time_pull_size=479)
 
 
