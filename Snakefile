@@ -1,4 +1,3 @@
-PRODUCTS = ['iv', 'dv']
 HUCS = [f'{h:02}' for h in range (1, 19)]
 
 workdir: "scripts/"
@@ -7,7 +6,8 @@ rule get_all_sites:
     input:
         "get_all_streamflow_sites.py"
     output:
-        expand("data/all_streamflow_sites_CONUS_{product}.csv", product=PRODUCTS)
+        expand("data/all_streamflow_sites_CONUS_{product}.csv",
+        product=['iv', 'dv'])
     shell:
         "python {input}"
 
