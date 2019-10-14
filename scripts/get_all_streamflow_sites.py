@@ -1,6 +1,4 @@
-import matplotlib.pyplot as plt
 import pandas as pd
-import io
 import requests
 import os
 
