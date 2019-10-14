@@ -5,11 +5,12 @@ import numpy as np
 import json
 import requests
 import datetime
-from utils import divide_chunks, get_indices_not_done, get_sites_for_huc2, \
-    append_to_csv_column_wise
+from utils import divide_chunks, get_indices_not_done,\
+    get_sites_for_huc2, append_to_csv_column_wise
 
 
-def get_all_streamflow_data_for_huc2(huc2, output_file, num_sites_per_chunk=5,
+def get_all_streamflow_data_for_huc2(huc2, output_file, sites_file,
+                                     num_sites_per_chunk=5,
                                      start_date="1970-01-01",
                                      end_date='2019-01-01', time_scale='H',
                                      output_format='zarr'):
@@ -32,7 +33,7 @@ def get_all_streamflow_data_for_huc2(huc2, output_file, num_sites_per_chunk=5,
     :return: None
     """
     product = get_product_from_time_scale(time_scale)
-    site_codes_in_huc2 = get_sites_for_huc2(huc2, product)
+    site_codes_in_huc2 = get_sites_for_huc2(sites_file, huc2)
     not_done_sites = get_indices_not_done(output_file, site_codes_in_huc2,
                                           'site_code', output_format)
     site_codes_chunked = divide_chunks(not_done_sites, num_sites_per_chunk)
@@ -52,6 +53,8 @@ def get_all_streamflow_data_for_huc2(huc2, output_file, num_sites_per_chunk=5,
             continue
         if streamflow_df_sites is not None:
             chunk_dfs.append(streamflow_df_sites)
+    if not chunk_dfs:
+        return None
     all_chunks_df = pd.concat(chunk_dfs, axis=1)
 
     # write the data out to the output file
