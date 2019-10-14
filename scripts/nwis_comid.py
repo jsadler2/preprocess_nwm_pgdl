@@ -3,7 +3,7 @@ Get the nhd comid's that correspond to nwis site codes
 """
 
 import pandas as pd
-from utils import get_sites_for_huc2, hucs, generate_nldi_url,\
+from utils import get_sites_for_huc2, generate_nldi_url,\
         json_from_nldi_request, get_nldi_data_huc2
 
 
@@ -22,14 +22,15 @@ def get_comid_for_one_nwis(nwis_site):
     return df
 
 
-def get_comids_for_nwis_huc2(huc2, outfile, outfile_type):
+def get_comids_for_all_nwis(outfile, outfile_type, sites_file_name):
     # Warning NLDI only has the "iv" NWIS sites
-    sites_iv = get_sites_for_huc2(hucs[1], 'iv')
-    get_nldi_data_huc2(sites_iv, outfile, get_comid_for_one_nwis,
+    # get all sites numbers
+    sites = get_sites_for_huc2(sites_file_name)
+    get_nldi_data_huc2(sites, outfile, get_comid_for_one_nwis,
                        'nwis_site_code', outfile_type)
 
 
 if __name__ == "__main__":
-    huc = '02'
-    get_comids_for_nwis_huc2(huc, f'E:\\data\\nwis_comid_{huc}.csv',
-                             outfile_type='csv')
+    out_file = snakemake.output[0]
+    site_file = snakemake.input[0]
+    get_comids_for_all_nwis(out_file, 'csv', site_file)
