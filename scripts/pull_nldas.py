@@ -3,6 +3,7 @@ from pydap.cas.urs import setup_session
 import pandas as pd
 import xarray as xr
 import time
+import s3fs
 
 minimum_date = "1979-01-01 13:00"
 base_url = 'https://hydro1.sci.gsfc.nasa.gov/dods/NLDAS_FORA0125_H.002?'
@@ -93,8 +94,13 @@ def get_urs_pass_user(netrc_file):
 
 if __name__ == '__main__':
     netrc = 'C:\\Users\\jsadler\\.netrc'
+
+    fs = s3fs.S3FileSystem()
+    my_bucket = 'esip-nwm-uswest2/'
+    file_name = f'{my_bucket}nwm-dl/nldas'
+    s3map = s3fs.S3Map(file_name, s3=fs)
+
     username, password = get_urs_pass_user(netrc)
-    zarr_data_store = f'nldas'
-    nldas_to_zarr(zarr_data_store, password, username, time_pull_size=479)
+    nldas_to_zarr(s3map, password, username, time_pull_size=479)
 
 
