@@ -1,0 +1,25 @@
+# these are categories of the nhd science data that will be excluded from the
+# watershed data used in model training
+
+# you can exclude by ID or by theme
+IDS_EXCLUDE:
+    CDL
+    ECOL
+    HLR
+    BEDPERM
+    SOLLER
+    PHYSIO
+    CRP
+    WILDFIRE
+    HDEN
+    SOHL
+    NWALT
+    SRL
+    SALIN
+THEMES_EXCLUDE:
+    Chemical
+    Geology
+# anything under IDS_INCLUDE will be added back in if it was removed previously
+# through a theme
+IDS_INCLUDE:
+    CAT_ROCK
