@@ -4,11 +4,10 @@ data_dir = "E:\\data\\"
 
 rule all:
     input:
-        daily_discharge = expand("{indicator_dir}/daily_discharge_huc_{huc}.txt",
+        daily_discharge = expand("{indicator_dir}daily_discharge_huc_{huc}.txt",
                                  huc=HUCS, indicator_dir=indicator_dir),
-        nwis_comid_table = f"{data_dir}\\nwis_comids.csv",
+        nwis_comid_table = f"{indicator_dir}nwis_comid_indicator.txt",
         nhd_categories = "data/nhd_categories_filtered.csv"
-
 
 rule get_all_sites:
     output:
@@ -32,6 +31,8 @@ rule get_nwis_comid_table:
     input:
         # the input is the sites 'iv' table
         rules.get_all_sites.output[0]
+    params:
+        out_file = f"{data_dir}\\nwis_comids.csv",
     output:
         rules.all.input.nwis_comid_table
     script:
