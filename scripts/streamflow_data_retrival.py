@@ -1,11 +1,12 @@
-import os
-import pandas as pd
-import xarray as xr
-import numpy as np
-import json
-import requests
 import datetime
-from utils import divide_chunks, get_indices_not_done,\
+import json
+
+import numpy as np
+import pandas as pd
+import requests
+import xarray as xr
+
+from utils import divide_chunks, get_indices_not_done, \
     get_sites_for_huc2, append_to_csv_column_wise
 
 
@@ -18,24 +19,27 @@ def get_all_streamflow_data_for_huc2(huc2, output_file, sites_file,
     gets all streamflow data for a date range for a given huc2. Calls are
     chunked by station
 
-    :param huc2: str - zero-padded huc 2 (e.g., "02")
-    :param output_file: str - path to the csv file or zarr store where the data
+    :param huc2: [str] zero-padded huc 2 (e.g., "02")
+    :param output_file: [str] path to the csv file or zarr store where the data
     will be stored
-    :param num_sites_per_chunk: int - the number of sites that will be pulled
+    :param sites_file: [str] path to file that contains the nwis site
+    information
+    :param num_sites_per_chunk: [int] the number of sites that will be pulled
     at in each web service call
-    :param start_date: str - the start date of when you want the data for
+    :param start_date: [str] the start date of when you want the data for
     (e.g., "1980-01-01")
-    :param end_date: str - the end date of when you want the data for
+    :param end_date: [str] the end date of when you want the data for
     (e.g., "1990-01-01")
-    :param time_scale: str - Pandas like time string for the time scale at which
+    :param time_scale: [str] Pandas like time string for the time scale at which
     the data will be aggregated (e.g., 'H' for hour or 'D' for daily)
-    :param output_format: str - the format of the output file. 'csv' or 'zarr'
+    :param output_format: [str] the format of the output file. 'csv' or 'zarr'
     :return: None
     """
     product = get_product_from_time_scale(time_scale)
     site_codes_in_huc2 = get_sites_for_huc2(sites_file, huc2)
     not_done_sites = get_indices_not_done(output_file, site_codes_in_huc2,
-                                          'site_code', output_format)
+                                          'site_code', output_format,
+                                          is_column=False)
     site_codes_chunked = divide_chunks(not_done_sites, num_sites_per_chunk)
 
     # loop through site_code_chunks

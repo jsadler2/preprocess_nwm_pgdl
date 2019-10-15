@@ -2,13 +2,14 @@
 This module contains utility functions for getting data for hucs that may be
 used in multiple, more specific applications
 """
-import os
+import datetime
 import json
+import os
+
+import numpy as np
+import pandas as pd
 import requests
 import xarray as xr
-import pandas as pd
-import numpy as np
-import datetime
 
 base_nldi_url = 'https://labs.waterdata.usgs.gov/api/nldi'
 hucs = [f'{h:02}' for h in range(1, 19)]
@@ -93,16 +94,16 @@ def get_indices_done_csv(output_file, dim_name, is_column):
     :param output_file: the file that the data will be stored in
     :param dim_name: the dimension name if it's a column
     :param is_column: whether the index is stored in a column. otherwise it is
-    assumed that the index is the columns themselves (i.e., you are appending
-    to the file columnwise)
+    assumed that the index is the column names themselves (i.e., you are
+    appending to the file columnwise)
     :return: a array-like containing the indices that have already been pulled
     """
     with open(output_file, 'r') as f:
         df = pd.read_csv(output_file, dtype={dim_name: str})
         if is_column:
-            return df.columns
-        else:
             return df[dim_name]
+        else:
+            return df.columns
 
 
 def get_indices_not_done(output_file, all_indices, dim_name, file_type,
