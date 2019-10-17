@@ -2,12 +2,16 @@ HUCS = [f'{h:02}' for h in range (1, 19)]
 indicator_dir = "data/indicators/"
 data_dir = "E:\\data\\"
 
+nldas_zarr_store_type = 'local'
+nldas_zarr_store = f"{data_dir}\\nldas\\nldas"
+
 rule all:
     input:
         daily_discharge = expand("{indicator_dir}daily_discharge_huc_{huc}.txt",
                                  huc=HUCS, indicator_dir=indicator_dir),
-        nwis_comid_table = f"{indicator_dir}nwis_comid_indicator.txt",
-        nhd_categories = "data/nhd_categories_filtered.csv"
+        nwis_comid_table = f"{indicator_dir}nwis_comid_indicator_dv.txt",
+        nhd_categories = "data/nhd_categories_filtered.csv",
+        nldas_indicator = f"{indicator_dir}/nldas_indicator_{nldas_zarr_store_type}.txt"
 
 rule get_all_sites:
     output:
@@ -30,9 +34,9 @@ rule get_daily_discharge:
 rule get_nwis_comid_table:
     input:
         # the input is the sites 'iv' table
-        rules.get_all_sites.output[0]
+        rules.get_all_sites.output[1]
     params:
-        out_file = f"{data_dir}\\nwis_comids.csv",
+        out_file = f"{data_dir}\\nwis_comids_dv.csv",
     output:
         rules.all.input.nwis_comid_table
     script:
@@ -46,3 +50,12 @@ rule get_nhd_characteristic_subset_list:
         "data/nhd_categories_filtered.csv"
     script:
         "scripts/get_nhd_characteristic_list.py"
+
+rule nldas_to_zarr_store:
+    params:
+        zarr_store = nldas_zarr_store,
+        netrc_file = 'C:\\Users\\jsadler\\.netrc'
+    output:
+        rules.all.input.nldas_indicator
+    script:
+        "scripts/pull_nldas.py"
