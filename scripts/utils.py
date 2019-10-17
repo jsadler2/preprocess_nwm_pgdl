@@ -131,12 +131,14 @@ def get_nldi_data_huc2(identifiers, out_file, get_one_func, identifier_name,
                        out_file_type='zarr'):
     not_done_identifiers = get_indices_not_done(out_file, identifiers,
                                                 identifier_name, out_file_type)
-    chunk_size = 20
+    chunk_size = 40
     chunked_list = divide_chunks(not_done_identifiers, chunk_size)
     for chunk in chunked_list:
         df_list = []
         for identifier in chunk:
             try:
+                print(f"trying to get data for {identifiers.index(identifier)}",
+                      flush=True)
                 single_df = None
                 single_df = get_one_func(identifier)
                 print(f"got data for {identifiers.index(identifier)}"
@@ -148,12 +150,13 @@ def get_nldi_data_huc2(identifiers, out_file, get_one_func, identifier_name,
                     json.decoder.JSONDecodeError):
                 continue
 
-        df_combined = pd.concat(df_list)
+        if df_list:
+            df_combined = pd.concat(df_list)
 
-        if out_file_type == 'zarr':
-            append_to_zarr(df_combined, out_file, identifier_name)
-        elif out_file_type == 'csv':
-            append_to_csv_row_wise(df_combined, out_file)
+            if out_file_type == 'zarr':
+                append_to_zarr(df_combined, out_file, identifier_name)
+            elif out_file_type == 'csv':
+                append_to_csv_row_wise(df_combined, out_file)
 
 
 def append_to_zarr(df, out_zarr_file, append_dim):
