@@ -4,6 +4,7 @@ import pandas as pd
 import xarray as xr
 import time
 import s3fs
+from utils import write_indicator_file
 
 minimum_date = "1979-01-01 13:00"
 base_url = 'https://hydro1.sci.gsfc.nasa.gov/dods/NLDAS_FORA0125_H.002?'
@@ -33,6 +34,25 @@ def get_undone_range(zarr_store, time_pull_size, end_date):
     return range(start, num_total_dt_steps, time_pull_size)
 
 
+def connect_to_urs(urs_user, urs_pass, lat_chunk=224, lon_chunk=464,
+                   time_chunk=480):
+    """
+    make a connection to the urs server 
+    :param urs_user: [str] the urs username
+    :param urs_pass: [str] the urs password
+    :param lat_chunk: [int] the zarr chunk size for the lat dimension
+    :param lon_chunk: [int] the zarr chunk size for the lon dimension
+    :param time_chunk: [int] the zarr chunk size for the time dimension
+    :return: [xarray dataset] dataset representing server data
+    """
+    session = setup_session(urs_pass, urs_user, check_url=base_url)
+
+    store = xr.backends.PydapDataStore.open(base_url, session=session)
+    chunks = {'lat': lat_chunk, 'lon': lon_chunk, 'time': time_chunk}
+    ds = xr.open_dataset(store).chunk(chunks)
+    return ds
+
+
 def nldas_to_zarr(zarr_store, urs_user, urs_pass, end_date="2019-01-01",
                   time_pull_size=959, lat_chunk=224, lon_chunk=464,
                   time_chunk=480):
@@ -50,11 +70,7 @@ def nldas_to_zarr(zarr_store, urs_user, urs_pass, end_date="2019-01-01",
     :param time_chunk: [int] the zarr chunk size for the time dimension
     :return: None
     """
-    session = setup_session(urs_pass, urs_user, check_url=base_url)
-
-    store = xr.backends.PydapDataStore.open(base_url, session=session)
-    chunks = {'lat': lat_chunk, 'lon': lon_chunk, 'time': time_chunk}
-    ds = xr.open_dataset(store).chunk(chunks)
+    ds = connect_to_urs(urs_user, urs_pass, lat_chunk, lon_chunk, time_chunk)
 
     undone_range = get_undone_range(zarr_store, time_pull_size, end_date)
     for i in undone_range:
@@ -93,14 +109,18 @@ def get_urs_pass_user(netrc_file):
 
 
 if __name__ == '__main__':
-    netrc = 'C:\\Users\\jsadler\\.netrc'
 
-    fs = s3fs.S3FileSystem()
-    my_bucket = 'esip-nwm-uswest2/'
-    file_name = f'{my_bucket}nwm-dl/nldas'
-    s3map = s3fs.S3Map(file_name, s3=fs)
+    # fs = s3fs.S3FileSystem()
+    # my_bucket = 'esip-nwm-uswest2/'
+    # file_name = f'{my_bucket}nwm-dl/nldas'
+    # s3map = s3fs.S3Map(file_name, s3=fs)
+
+    netrc = snakemake.params.netrc_file
+    zarr_store = snakemake.params.zarr_store
+    indicator_file = snakemake.output[0]
 
     username, password = get_urs_pass_user(netrc)
-    nldas_to_zarr(s3map, password, username, time_pull_size=479)
+    nldas_to_zarr(zarr_store, password, username, time_pull_size=479)
+    write_indicator_file(nldas_to_zarr, indicator_file)
 
 
