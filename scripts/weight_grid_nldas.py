@@ -141,6 +141,14 @@ def combine_dfs_into_placeholder(placeholder, df_list):
     return placeholder
 
 
+def df_to_zarr(df):
+    data_array = xr.DataArray(df.values,
+                              [('comid', df.index),
+                               ('nldas_grid_no', df.columns)])
+    data_set = xr.Dataset({'weight': data_array})
+    return data_set
+
+
 def merge_weight_grid(chunk_folder, all_file_name):
     """
     read and merge the individual weight grid parquet files
@@ -151,17 +159,15 @@ def merge_weight_grid(chunk_folder, all_file_name):
     individual files are stored
     :return: None
     """
-    df_list = []
     for f in os.listdir(chunk_folder):
         if f.endswith('uint8.parquet'):
             print('reading in ', f, flush=True)
             df = pd.read_parquet(os.path.join(chunk_folder, f))
-            df_list.append(df)
-
-    placeholder_df = create_placeholder_df(df_list)
-    combined = combine_dfs_into_placeholder(placeholder_df, df_list)
-    combined.to_parquet(os.path.join(chunk_folder, all_file_name))
-
+            df = df/100.
+            ds = df_to_zarr(df)
+            ds.to_zarr(os.path.join(chunk_folder, all_file_name),
+                       append_dim='comid', mode='a')
+            
 
 if __name__ == '__main__':
     nhd_gdb = ("D:\\nhd\\NHDPlusV21_NationalData_Seamless_Geodatabase_Lower48_07"
