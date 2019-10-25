@@ -197,3 +197,28 @@ def write_indicator_file(func, file_name):
     with open(file_name, 'w') as f:
         f.write(f'successfully ran {func} \n')
         f.write(str(datetime.datetime.now()))
+
+
+def make_nwis_sites_list(data_file, out_file):
+    df = pd.read_parquet(data_file)
+    with open(out_file, 'w') as f:
+        f.write("\n".join(df.columns[1:].to_list()))
+
+
+def read_nwis_sites_list():
+    data_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
+                                             'data', 'tables',
+                                             'nwis_site_list_dv.csv'))
+    data = pd.read_csv(data_path, header=None, dtype='str')
+    return data
+
+
+def read_nwis_comid():
+    nwis_comid_file = os.path.abspath(os.path.join(
+        os.path.dirname(__file__), '..', 'data', 'tables',
+        'nwis_comid.csv'))
+
+    df = pd.read_csv(nwis_comid_file,
+                     dtype={'nwis_site_code': str, 'comid':int})
+    return df
+
