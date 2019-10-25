@@ -1,17 +1,21 @@
+import scripts.utils as su
+from scripts.nwis_comid import get_comids_for_all_nwis_nhd
+
 HUCS = [f'{h:02}' for h in range (1, 19)]
 indicator_dir = "data/indicators/"
-data_dir = "E:\\data\\"
+data_dir = "D:\\nwm-ml-data\\"
 
-nldas_zarr_store_type = 'local'
-nldas_zarr_store = f"{data_dir}\\nldas\\nldas"
+nldas_zarr_store_type = 's3'
+nldas_zarr_store = f"{data_dir}\\nldas\\nldas2"
 
 rule all:
     input:
         daily_discharge = expand("{indicator_dir}daily_discharge_huc_{huc}.txt",
                                  huc=HUCS, indicator_dir=indicator_dir),
-        nwis_comid_table = f"{indicator_dir}nwis_comid_indicator_dv.txt",
-        nhd_categories = "data/nhd_categories_filtered.csv",
-        nldas_indicator = f"{indicator_dir}/nldas_indicator_{nldas_zarr_store_type}.txt"
+        nwis_comid_table = "data/tables/nwis_comid.csv",
+        nhd_categories = "data/tables/nhd_categories_filtered.csv",
+        nldas_indicator = f"{indicator_dir}/nldas_indicator_{nldas_zarr_store_type}.txt",
+        nwis_site_list = "data/tables/nwis_site_list_dv.csv"
 
 rule get_all_sites:
     output:
@@ -33,21 +37,20 @@ rule get_daily_discharge:
 
 rule get_nwis_comid_table:
     input:
-        # the input is the sites 'iv' table
-        rules.get_all_sites.output[1]
-    params:
-        out_file = f"{data_dir}\\nwis_comids_dv.csv",
+        "data/raw/nhd_nwis_all.csv",
+        rules.all.input.nwis_site_list
     output:
         rules.all.input.nwis_comid_table
-    script:
-        "scripts/nwis_comid.py"
+    run:
+        print(input)
+        get_comids_for_all_nwis_nhd(output[0], input[1], input[0])
 
 rule get_nhd_characteristic_subset_list:
     input:
         metadata_file="data/raw/nhd_characteristics_metadata_table.csv",
-        exclude_file="data/nhd_categories_to_exclude.yml"
+        exclude_file="data/tables/nhd_categories_to_exclude.yml"
     output:
-        "data/nhd_categories_filtered.csv"
+        rules.all.input.nhd_categories
     script:
         "scripts/get_nhd_characteristic_list.py"
 
@@ -59,3 +62,12 @@ rule nldas_to_zarr_store:
         rules.all.input.nldas_indicator
     script:
         "scripts/pull_nldas.py"
+
+rule make_nwis_sites_list_dv:
+    input:
+        f"{data_dir}streamflow_data/all_daily_discharge.parquet"
+    output:
+         "data/tables/nwis_site_list_dv.csv"
+         # rules.all.input.nwis_site_list
+    run:
+        su.make_nwis_sites_list(input[0], output[0])
