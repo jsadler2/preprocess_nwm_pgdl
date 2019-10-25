@@ -89,10 +89,6 @@ def get_all_col_or_idx(df_list, col_or_idx='col'):
     comids_unique = np.unique(all_comids)
     comids_sorted = np.sort(comids_unique)
     comids_index = pd.Index(comids_sorted)
-
-    if col_or_idx == 'col':
-        comids_index = comids_index.astype(str)
-
     return comids_index
 
 
@@ -110,20 +106,28 @@ def create_placeholder_df(df_list):
     return df
 
 
-def resize_individual_df(placeholder, indvi_df):
+def resize_individual_df_cols(all_cols, indvi_df):
     """
-    resize the df chunks to the same as the overall placeholder and replace
-    the NaNs with zeros and convert back to uint8
-    :param placeholder: [pandas df] the placeholder df with the overall
-    dimensions, index, and columns
-    :param indvi_df: [pandas df] the indivual df (a chunk of the overall one)
-    :return: [pandas df] the individual df but indexed like the placeholder with
-    the correct dtype
+    resize the df chunks to the same cols as the overall placeholder and replace
+    the NaNs with zeros and convert back to uint8. this is to ensure all have
+    the same number of columns so we can append to the zarr dataset
+    :param all_cols: [pandas index] all the column names (all the numbers in the
+    NLDAS grid)
+    :param indvi_df: [pandas df] the individual df (a chunk of the overall one)
+    :return: [pandas df] the individual df but with all columns
     """
-    resized = indvi_df.reindex_like(placeholder)
-    resized = resized.fillna(0)
-    resized = resized.astype('uint8')
-    return resized
+    # convert cols to int
+    indvi_df.columns = indvi_df.columns.astype('uint32')
+
+    # get columns not in individual df
+    in_individual = np.isin(all_cols, indvi_df.columns)
+    missing_cols = all_cols[~in_individual]
+    # blank df with new cols
+    blank_df = pd.DataFrame(0, columns=missing_cols,
+                            index=indvi_df.index, dtype='uint8')
+    combined = pd.concat([indvi_df, blank_df], axis=1)
+    combined = combined.reindex(sorted(combined.columns), axis=1)
+    return combined
 
 
 def combine_dfs_into_placeholder(placeholder, df_list):
@@ -136,17 +140,42 @@ def combine_dfs_into_placeholder(placeholder, df_list):
     :return: [df] a combined weight matrix
     """
     for d in df_list:
-        resized = resize_individual_df(placeholder, d)
+        resized = resize_individual_df_cols(placeholder, d)
         placeholder = placeholder + resized
     return placeholder
 
 
-def df_to_zarr(df):
+def df_to_ds(df):
     data_array = xr.DataArray(df.values,
                               [('comid', df.index),
                                ('nldas_grid_no', df.columns)])
     data_set = xr.Dataset({'weight': data_array})
     return data_set
+
+
+def get_chunked_files_list(chunk_folder):
+    file_list = []
+    for f in os.listdir(chunk_folder):
+        if f.endswith('uint8.parquet'):
+            file_path = os.path.join(chunk_folder, f)
+            file_list.append(file_path)
+    return file_list
+
+
+def get_df_list(chunk_folder):
+    df_list = []
+    file_list = get_chunked_files_list(chunk_folder)
+    for f in file_list:
+        print('reading in ', f, flush=True)
+        df = pd.read_parquet(f)
+        df_list.append(df)
+    return df_list
+
+
+def get_cols_from_chunk_folder(chunk_folder):
+    df_list = get_df_list(chunk_folder)
+    cols = get_all_col_or_idx(df_list, 'col')
+    return cols
 
 
 def merge_weight_grid(chunk_folder, all_file_name):
@@ -159,15 +188,28 @@ def merge_weight_grid(chunk_folder, all_file_name):
     individual files are stored
     :return: None
     """
-    for f in os.listdir(chunk_folder):
-        if f.endswith('uint8.parquet'):
-            print('reading in ', f, flush=True)
-            df = pd.read_parquet(os.path.join(chunk_folder, f))
-            df = df/100.
-            ds = df_to_zarr(df)
+    all_cols = get_cols_from_chunk_folder(chunk_folder)
+    i = 0
+    chunk_files = get_chunked_files_list(chunk_folder)
+    for f in chunk_files:
+        d = pd.read_parquet(f)
+        nrows = d.shape[0]
+        num_mini_splits = 20
+        num_per_split = nrows / num_mini_splits
+        for n in range(num_mini_splits):
+            start_chunk = math.floor(num_per_split * n)
+            end_chunk = math.floor(num_per_split * (n + 1))
+            print(f"processing mini-chunk {start_chunk} to {end_chunk}",
+                  flush=True)
+            mini_chunk = d.iloc[start_chunk: end_chunk, :]
+            resized = resize_individual_df_cols(all_cols, mini_chunk)
+            resized = resized/255.
+            ds = df_to_ds(resized)
+            print(f"writing mini-chunk {start_chunk} to {end_chunk} to zarr",
+                  flush=True)
             ds.to_zarr(os.path.join(chunk_folder, all_file_name),
                        append_dim='comid', mode='a')
-            
+
 
 if __name__ == '__main__':
     nhd_gdb = ("D:\\nhd\\NHDPlusV21_NationalData_Seamless_Geodatabase_Lower48_07"
@@ -179,5 +221,5 @@ if __name__ == '__main__':
     out_dir = "../data/wgt_matrix_chunks/"
 
     # calculate_weight_matrix_chunks(nhd_gdb, grid_gdb, out_dir)
-    merge_weight_grid(out_dir, "weight_matrix_all")
+    merge_weight_grid(out_dir, "weight_matrix_all_zarr2")
     # chunks_to_float16(out_dir)
