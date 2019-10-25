@@ -1,0 +1,2 @@
+successfully ran <function get_comids_for_all_nwis at 0x000002B8F07095E8> 
+2019-10-15 13:32:49.072704
