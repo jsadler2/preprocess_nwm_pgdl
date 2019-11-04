@@ -94,6 +94,19 @@ def get_upstream_comids_all(out_file, comid_list=None):
         combined.to_csv(out_file, mode='a', header=not bool(i))
 
 
+def get_all_us_nwis_comids_from_df(comid, all_comid_df):
+    """
+    retrieve all us_comids from the all_comid_df for a given comid
+    :param comid: [int] the comid for which you want the upstream comids
+    :param all_comid_df: [pandas dataframe] dataframe with comids in one column
+    and the all US comids in the other
+    :return: [pandas series] all comids upstream of the given comid
+    """
+    all_us_comids = all_comid_df.loc[comid, 'US_comids']
+    all_us_comids_list = str_list_to_series(all_us_comids)
+    return all_us_comids_list
+
+
 def get_us_nwis_comids(comid, all_comid_df):
     """
     get all of the comids that are upstream of a given nwis comid that also
@@ -103,8 +116,7 @@ def get_us_nwis_comids(comid, all_comid_df):
     and the all US comids in the other
     :return: [list] list of comids upstream of the given comid
     """
-    all_us_comids = all_comid_df.loc[comid, 'US_comids']
-    all_us_comids_list = string_to_list(all_us_comids)
+    all_us_comids_list = get_all_us_nwis_comids_from_df(comid, all_comid_df)
     nwis_us_comid_mask = all_comid_df.index.isin(all_us_comids_list)
     nwis_us_comid = all_comid_df.index[nwis_us_comid_mask]
     # drop the comid in question from the result
@@ -124,21 +136,48 @@ def combine_us_comids(idx_comids, all_comid_df):
     """
     idx_df = all_comid_df.loc[idx_comids, 'US_comids']
     combined_comids = idx_df.sum()
-    combined_comid_list = string_to_list(combined_comids)
+    combined_comid_list = str_list_to_series(combined_comids)
     return combined_comid_list
 
 
-def string_to_list(str_of_list):
+def str_list_to_series(str_of_list):
     """
+    convert a string representation of a list into a list and then a pandas
+    Series
     :param str_of_list: [str] representation of a list (e.g., '[1, 2, 3]')
-    :return: [list] the list
+    :return: [pandas series]
     """
     str_of_list = str_of_list.replace(']', ',')
     str_of_list = str_of_list.replace('[', ',')
     str_of_list = str_of_list.split(',')
     stripped = [a.strip() for a in str_of_list if a != '']
-    return stripped
-    
+    return pd.Series(stripped)
+
+
+def get_intermediate_comids(nwis_comid, all_comid_df):
+    """
+    get all of the comids between an nwis_comid and the next nwis_comids
+    upstream. first get all of the comids upstream of the nwis comid. then get
+    the nwis comids upstream of the nwis_comid. then combine all upstream comids
+    of the upstream nwis comids. then take out the combined comids from the
+    full set of upstream comids of the nwis_comid.
+    :param nwis_comid: [int] the nwis comid for which you want the intermediate
+    comids
+    :param all_comid_df: [pandas dataframe] dataframe with comids in one column
+    and the all US comids in the other
+    :return: [list] a list of intermediate comids
+    """
+    all_us_comids = get_all_us_nwis_comids_from_df(nwis_comid, all_comid_df)
+    us_nwis_comids = get_us_nwis_comids(nwis_comid, all_comid_df)
+    if len(us_nwis_comids) > 0:
+        all_comids_us_of_us_nwis = combine_us_comids(us_nwis_comids,
+                                                     all_comid_df)
+        intermediate_comid_mask = all_us_comids.isin(all_comids_us_of_us_nwis)
+        intermediate_comids = all_us_comids[~intermediate_comid_mask]
+    else:
+        intermediate_comids = all_us_comids
+    return intermediate_comids.to_list()
+
 
 def filter_intermediate(us_comid_file, outfile):
     """
@@ -150,12 +189,32 @@ def filter_intermediate(us_comid_file, outfile):
     'US_comids'. The 'US_comids' column contains a list of all comids that are 
     upstream of the comid in the 'comid' column
     :param outfile: [str] filepath to which the filtered data should be written
-    :return none:
+    :return: [pandas dataframe] dataframe with intermediate values
     """
-    df_all = pd.read_csv(us_comid_file)
-    for comid in df_all['comid']:
-        relevant_comids = [df_all.index]
+    df_all = pd.read_csv(us_comid_file, dtype={'comid': int}, index_col='comid')
+    intermediate_all = []
+    for comid in df_all.index:
+        intermediate_comids = get_intermediate_comids(comid, df_all)
+        intermediate_all.append({'comid': comid,
+                                 'intermediate_comids': intermediate_comids})
+    intermediate_df = pd.DataFrame(intermediate_all)
+    intermediate_df.to_csv(outfile, index=False)
+    return intermediate_df
 
+
+def check_intermediate(intermediate_df):
+    """
+    check to make sure in the intermediate comids there are no duplicates
+    :param intermediate_df: [pandas dataframe] dataframe with columns 'comid'
+    and 'intermediate_comids'
+    :return:None
+    """
+    combined = intermediate_df['intermediate_comids'].sum()
+    intermediate_series = str_list_to_series(combined)
+    check = intermediate_df.is_unique
+    if not check:
+        raise ValueError('something went wrong with getting the intermediate'
+                         'comids')
 
 
 if __name__ == '__main__':
