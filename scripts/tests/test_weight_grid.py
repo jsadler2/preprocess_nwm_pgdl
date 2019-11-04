@@ -26,7 +26,8 @@ def test_create_placeholder():
     true_df = pd.DataFrame(0, columns=combined_cols, index=combined_idx,
                            dtype='uint8')
     assert true_df.equals(df)
-    assert df['0'].dtype == 'uint8'
+    print (df.head())
+    assert df[0].dtype == 'uint8'
 
 
 # def test_combine():
