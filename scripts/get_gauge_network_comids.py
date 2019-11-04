@@ -3,6 +3,7 @@ from utils import generate_nldi_url, json_from_nldi_request,\
     read_nwis_comid, get_indices_not_done, divide_chunks
 import pandas as pd
 from json.decoder import JSONDecodeError
+import json
 
 # read in the comid/nwis table
 # read in the nwis ids for which we have data
@@ -93,13 +94,68 @@ def get_upstream_comids_all(out_file, comid_list=None):
         combined.to_csv(out_file, mode='a', header=not bool(i))
 
 
-def filter_intermediate(US_comid_table):
+def get_us_nwis_comids(comid, all_comid_df):
+    """
+    get all of the comids that are upstream of a given nwis comid that also
+    have an nwis comid
+    :param comid: [int] comid for which you want the US nwis comids
+    :param all_comid_df: [pandas dataframe] dataframe with comids in one column
+    and the all US comids in the other
+    :return: [list] list of comids upstream of the given comid
+    """
+    all_us_comids = all_comid_df.loc[comid, 'US_comids']
+    all_us_comids_list = string_to_list(all_us_comids)
+    nwis_us_comid_mask = all_comid_df.index.isin(all_us_comids_list)
+    nwis_us_comid = all_comid_df.index[nwis_us_comid_mask]
+    # drop the comid in question from the result
+    nwis_us_comid = nwis_us_comid.drop(comid)
+    return nwis_us_comid
+
+
+def combine_us_comids(idx_comids, all_comid_df):
+    """
+    combine the upstream comids for each comid in the idx_comids list into one
+    list
+    :param idx_comids: [list or pandas index] the comids whose upstream comids
+    you want to combine
+    :param all_comid_df: [pandas dataframe] dataframe with comids in one column
+    and the all US comids in the other
+    :return: [list] combined list of comids
+    """
+    idx_df = all_comid_df.loc[idx_comids, 'US_comids']
+    combined_comids = idx_df.sum()
+    combined_comid_list = string_to_list(combined_comids)
+    return combined_comid_list
+
+
+def string_to_list(str_of_list):
+    """
+    :param str_of_list: [str] representation of a list (e.g., '[1, 2, 3]')
+    :return: [list] the list
+    """
+    str_of_list = str_of_list.replace(']', ',')
+    str_of_list = str_of_list.replace('[', ',')
+    str_of_list = str_of_list.split(',')
+    stripped = [a.strip() for a in str_of_list if a != '']
+    return stripped
+    
+
+def filter_intermediate(us_comid_file, outfile):
     """
     filter so that comids are not recorded twice. the comids for a given
     station are only the ones upstream of it and downstream of the next
-    upstream gauge
+    upstream gauge. this filtered data is written to a new csv file
+    :param us_comid_file: [str] path to file that contains US comid data. this
+    should be a csv with two columns. One columns is 'comid' and the other is
+    'US_comids'. The 'US_comids' column contains a list of all comids that are 
+    upstream of the comid in the 'comid' column
+    :param outfile: [str] filepath to which the filtered data should be written
+    :return none:
     """
-    pass
+    df_all = pd.read_csv(us_comid_file)
+    for comid in df_all['comid']:
+        relevant_comids = [df_all.index]
+
 
 
 if __name__ == '__main__':
