@@ -7,23 +7,22 @@ import requests
 import xarray as xr
 
 from utils import divide_chunks, get_indices_not_done, \
-    get_sites_for_huc2, append_to_csv_column_wise
+    get_site_codes, append_to_csv_column_wise
 
 
-def get_all_streamflow_data_for_huc2(huc2, output_file, sites_file,
-                                     num_sites_per_chunk=5,
-                                     start_date="1970-01-01",
-                                     end_date='2019-01-01', time_scale='H',
-                                     output_format='zarr'):
+def get_all_streamflow_data(output_file, sites_file, huc2=None,
+                            num_sites_per_chunk=5, start_date="1970-01-01",
+                            end_date='2019-01-01', time_scale='H',
+                            output_format='zarr', num_site_chunks_write=6):
     """
     gets all streamflow data for a date range for a given huc2. Calls are
     chunked by station
 
-    :param huc2: [str] zero-padded huc 2 (e.g., "02")
     :param output_file: [str] path to the csv file or zarr store where the data
     will be stored
     :param sites_file: [str] path to file that contains the nwis site
     information
+    :param huc2: [str] zero-padded huc 2 (e.g., "02")
     :param num_sites_per_chunk: [int] the number of sites that will be pulled
     at in each web service call
     :param start_date: [str] the start date of when you want the data for
@@ -33,18 +32,23 @@ def get_all_streamflow_data_for_huc2(huc2, output_file, sites_file,
     :param time_scale: [str] Pandas like time string for the time scale at which
     the data will be aggregated (e.g., 'H' for hour or 'D' for daily)
     :param output_format: [str] the format of the output file. 'csv' or 'zarr'
+    :param num_site_chunks_write:
     :return: None
     """
     product = get_product_from_time_scale(time_scale)
-    site_codes_in_huc2 = get_sites_for_huc2(sites_file, huc2)
-    not_done_sites = get_indices_not_done(output_file, site_codes_in_huc2,
-                                          'site_code', output_format,
-                                          is_column=False)
+    site_codes = get_site_codes(sites_file, huc2)
+
+    not_done_sites = get_indices_not_done(output_file, site_codes, 'site_code',
+                                          output_format, is_column=False)
     site_codes_chunked = divide_chunks(not_done_sites, num_sites_per_chunk)
 
     # loop through site_code_chunks
     chunk_dfs = []
+    i = 0
     for site_chunk in site_codes_chunked:
+        last_chunk = False
+        if len(site_chunk) < num_sites_per_chunk:
+            last_chunk = True
         streamflow_df_sites = None
         # catch if there is a problem on the server retrieving the data
         try:
@@ -57,15 +61,24 @@ def get_all_streamflow_data_for_huc2(huc2, output_file, sites_file,
             continue
         if streamflow_df_sites is not None:
             chunk_dfs.append(streamflow_df_sites)
-    if not chunk_dfs:
-        return None
-    all_chunks_df = pd.concat(chunk_dfs, axis=1)
+            # add the number of stations for which we got data
+            i += streamflow_df_sites.shape[1]
+
+            if not i % (num_site_chunks_write * num_sites_per_chunk) or \
+                    last_chunk:
+                print('writing out', flush=True)
+                write_out_chunks(chunk_dfs, output_file, output_format)
+                chunk_dfs = []
+
+
+def write_out_chunks(chunks_dfs, out_file, out_format):
+    all_chunks_df = pd.concat(chunks_dfs, axis=1)
 
     # write the data out to the output file
-    if output_format == 'zarr':
-        append_to_zarr(all_chunks_df, output_file)
-    elif output_format == 'csv':
-        append_to_csv_column_wise(all_chunks_df, output_file)
+    if out_format == 'zarr':
+        append_to_zarr(all_chunks_df, out_file)
+    elif out_format == 'csv':
+        append_to_csv_column_wise(all_chunks_df, out_file)
     else:
         raise ValueError("output_format should be 'csv' or 'zarr'")
 
@@ -92,6 +105,12 @@ def convert_df_to_dataset(streamflow_df):
                               [('datetime', streamflow_df.index),
                                ('site_code', streamflow_df.columns)])
     data_set = xr.Dataset({'streamflow': data_array})
+
+    # chunk
+    time_chunk = len(data_array.datetime)
+    site_code_chunk = len(data_array.site_code)
+    data_set = data_set.chunk({'datetime': time_chunk,
+                               'site_code': site_code_chunk})
     return data_set
 
 

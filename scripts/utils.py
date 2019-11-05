@@ -15,7 +15,7 @@ base_nldi_url = 'https://labs.waterdata.usgs.gov/api/nldi'
 hucs = [f'{h:02}' for h in range(1, 19)]
 
 
-def get_sites_for_huc2(sites_file, huc2=None):
+def get_site_codes(sites_file, huc2=None):
     """
     get the site codes for a given huc2, if provided. if a huc2 is not provided,
     get site codes for all huc2's
