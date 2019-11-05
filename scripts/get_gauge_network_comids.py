@@ -1,9 +1,8 @@
-import os
-from utils import generate_nldi_url, json_from_nldi_request,\
+import geopandas as gpd
+from scripts.utils import generate_nldi_url, json_from_nldi_request,\
     read_nwis_comid, get_indices_not_done, divide_chunks
 import pandas as pd
 from json.decoder import JSONDecodeError
-import json
 
 # read in the comid/nwis table
 # read in the nwis ids for which we have data
@@ -32,7 +31,8 @@ def parse_us_comid_data(data):
     :param data: [dict] the response from the nldi navigate/UT request
     :return: [list] a list of the comids upstream of the comid for which
     """
-    comid_list = [f['properties']['nhdplus_comid'] for f in data['features']]
+    comid_list = [int(f['properties']['nhdplus_comid'])
+                  for f in data['features']]
     return comid_list
 
 
@@ -191,7 +191,10 @@ def filter_intermediate(us_comid_file, outfile):
     :param outfile: [str] filepath to which the filtered data should be written
     :return: [pandas dataframe] dataframe with intermediate values
     """
-    df_all = pd.read_csv(us_comid_file, dtype={'comid': int}, index_col='comid')
+    print(us_comid_file)
+    print(pd.read_csv(us_comid_file))
+    df_all = pd.read_csv(us_comid_file, index_col='comid')
+    print(df_all.head())
     intermediate_all = []
     for comid in df_all.index:
         intermediate_comids = get_intermediate_comids(comid, df_all)
@@ -211,11 +214,54 @@ def check_intermediate(intermediate_df):
     """
     combined = intermediate_df['intermediate_comids'].sum()
     intermediate_series = str_list_to_series(combined)
-    check = intermediate_df.is_unique
+    check = intermediate_series.is_unique
     if not check:
         raise ValueError('something went wrong with getting the intermediate'
                          'comids')
 
 
+def dissolve_intermediate(int_comid_file, full_gdf, out_file):
+    """
+    dissolve the intermediate nhd catchments based on info in the intermediate
+    comid file and the full geometry file. Save to a new file (geojson)
+    :param int_comid_file: [str] path to a csv file that contains the
+    intermediate comid information with one column the 'comid' and the other
+    column 'intermediate_comids'
+    :param full_geom_file: [geopandas geodataframe] gdf with all the nhd
+    catchments
+    :param out_file: [str] path to a geojson file to which the dissolved data
+    will be saved
+    :return: [geoppandas geodataframe] gdf with the dissolved catchments
+    """
+    int_df = pd.read_csv(int_comid_file)
+    # explodes converts the list of intermediate comids into their own rows
+    int_ex = int_df.explode('intermediate_comids')
+    # set the intermediate_comids as index b/c we will join on that
+    int_ex.set_index('intermediate_comids', inplace=True)
+    # we name the column dissolve comid b/c we will dissolved based on that
+    int_ex.columns = ['dissolve_comid']
+    # set the index as the comid
+    full_gdf.set_index('FEATUREID', inplace=True)
+
+    full_gdf = full_gdf.join(int_ex)
+    print("performing dissolve")
+    full_gdf_diss = full_gdf.dissolve('dissolve_comid')
+    print("writing dissolved file")
+    full_gdf_diss.to_file(out_file, driver='GeoJSON')
+    return full_gdf_diss
+
+
+def dissolve_intermediate_all_conus():
+    nhd_gdb = ("D:\\nhd\\NHDPlusV21_NationalData_Seamless_Geodatabase_Lower48_07"
+               "\\NHDPlusNationalData"
+               "\\NHDPlusV21_National_Seamless_Flattened_Lower48.gdb")
+    layer = 'Catchment'
+    cathment_gdf = gpd.read_file(nhd_gdb, layer=layer)
+    print("read in nhd catchments")
+    int_comid_file = "../data/tables/upstream_comids.csv"
+    out_file = "../data/dissolved_comids.json"
+    dissolve_intermediate(int_comid_file, cathment_gdf, out_file)
+
+
 if __name__ == '__main__':
-    get_upstream_comids_all('../data/tables/upstream_comids.csv')
+    dissolve_intermediate_all_conus()
