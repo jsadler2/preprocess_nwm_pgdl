@@ -13,7 +13,8 @@ from utils import divide_chunks, get_indices_not_done, \
 def get_all_streamflow_data(output_file, sites_file, huc2=None,
                             num_sites_per_chunk=5, start_date="1970-01-01",
                             end_date='2019-01-01', time_scale='H',
-                            output_format='zarr', num_site_chunks_write=6):
+                            output_format='zarr', num_site_chunks_write=6,
+                            s3=False):
     """
     gets all streamflow data for a date range for a given huc2. Calls are
     chunked by station
@@ -33,13 +34,15 @@ def get_all_streamflow_data(output_file, sites_file, huc2=None,
     the data will be aggregated (e.g., 'H' for hour or 'D' for daily)
     :param output_format: [str] the format of the output file. 'csv' or 'zarr'
     :param num_site_chunks_write:
+    :param S3:
     :return: None
     """
     product = get_product_from_time_scale(time_scale)
     site_codes = get_site_codes(sites_file, huc2)
 
     not_done_sites = get_indices_not_done(output_file, site_codes, 'site_code',
-                                          output_format, is_column=False)
+                                          output_format, is_column=False,
+                                          s3=s3)
     site_codes_chunked = divide_chunks(not_done_sites, num_sites_per_chunk)
 
     # loop through site_code_chunks

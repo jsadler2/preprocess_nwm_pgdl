@@ -5,6 +5,9 @@ used in multiple, more specific applications
 import datetime
 import json
 import os
+import s3fs
+import boto3
+import botocore
 
 import numpy as np
 import pandas as pd
@@ -82,7 +85,15 @@ def divide_chunks(l, n):
         yield l[i:i + n]
 
 
-def get_indices_done_zarr(output_zarr, zarr_dim_name):
+def load_s3_zarr_store(s3_zarr_path):
+    fs = s3fs.S3FileSystem()
+    zarr_store = s3fs.S3Map(file_name, s3=fs)
+    return zarr_store
+
+
+def get_indices_done_zarr(output_zarr, zarr_dim_name, s3=False):
+    if s3:
+        output_zarr = load_s3_zarr_store(output_zarr)
     ds = xr.open_zarr(output_zarr)
     indices = ds[zarr_dim_name]
     return indices
@@ -106,10 +117,34 @@ def get_indices_done_csv(output_file, dim_name, is_column):
             return df.columns
 
 
+def check_if_s3_resource_exists(s3_path):
+    path_split = s3_path.split("/")
+    s3 = boto3.resource('s3')
+    try:
+        s3.Object(*path_split).load()
+    except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == "404":
+            # The object does not exist.
+            return False
+        else:
+            # Something else has gone wrong.
+            raise ValueError('something went wrong when checking if s3 object\
+                    exists')
+    else:
+        return True
+
+
+def check_if_exists(path, s3=False):
+    if s3:
+        return check_if_s3_resource_exists(path)
+    else:
+        return os.path.exists(output_file) 
+
+
 def get_indices_not_done(output_file, all_indices, dim_name, file_type,
-                         is_column=True):
+                         is_column=True, s3=False):
     # check if zarr dataset exists
-    if os.path.exists(output_file):
+    if check_if_exists(output_file, s3):
         # get the indices that are done
         if file_type == 'zarr':
             indices_done = get_indices_done_zarr(output_file, dim_name)
