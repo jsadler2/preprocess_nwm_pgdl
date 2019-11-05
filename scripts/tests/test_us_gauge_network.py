@@ -2,11 +2,8 @@ import os
 import get_gauge_network_comids as gt
 import pandas as pd
 
-toy_sample_csv = 'sample_us_comid_file.csv'
-toy_sample_df = pd.read_csv(toy_sample_csv, index_col='comid')
-
 toy_sample_csv_num = 'sample_us_comid_file_numbers.csv'
-toy_sample_df_num = pd.read_csv(toy_sample_csv, index_col='comid')
+toy_sample_df_num = pd.read_csv(toy_sample_csv_num, index_col='comid')
 
 real_sample_csv = 'gauge_network_catchments/us_comids-01474500.csv'
 real_sample_df = pd.read_csv(real_sample_csv, index_col='comid')
@@ -37,10 +34,9 @@ def test_get_nwis_us():
 
 
 def test_combine_toy():
-    combine_idx = ['a', 'd', 'g']
-    true_combined = pd.Series(['a', 'b', 'c', 'd', 'e', 'f', 'd', 'e', 'f', 'h',
-                               'i'])
-    combined = gt.combine_us_comids(combine_idx, toy_sample_df)
+    combine_idx = [5, 7, 4]
+    true_combined = pd.Series([5, 6, 7, 8, 7, 8, 4])
+    combined = gt.combine_us_comids(combine_idx, toy_sample_df_num)
     assert true_combined.equals(combined)
 
 
@@ -48,15 +44,21 @@ def test_combine_real():
     combine_idx = [4782005, 4780759]
     true_combined = [4782005, 4782003, 4780617, 4780759, 4780705, 4780779,
                      4780677, 4780701]
-    true_combined = pd.Series([str(c) for c in true_combined])
+    true_combined = pd.Series(true_combined)
 
     combined = gt.combine_us_comids(combine_idx, real_sample_df)
     assert true_combined.equals(combined)
 
 
-def test_intermediate_toy():
-    intermediate = gt.get_intermediate_comids('a', toy_sample_df)
-    true_intermediate = ['a', 'b', 'c']
+def test_intermediate_toy_multiple():
+    intermediate = gt.get_intermediate_comids(1, toy_sample_df_num)
+    true_intermediate = [1, 2, 3]
+    assert sorted(true_intermediate) == sorted(intermediate)
+
+
+def test_intermediate_toy_single():
+    intermediate = gt.get_intermediate_comids(4, toy_sample_df_num)
+    true_intermediate = [4]
     assert sorted(true_intermediate) == sorted(intermediate)
 
 
@@ -77,8 +79,5 @@ def test_intermediate_all_toy_num():
     ]
     true_int_df = pd.DataFrame(true_data)
     int_df = gt.filter_intermediate(toy_sample_csv_num, 'temp.csv')
-    # os.remove('temp.csv')
-    print(true_int_df)
-    print(int_df)
-    print(true_int_df.iloc[0, 1], int_df.iloc[0, 1])
+    os.remove('temp.csv')
     assert true_int_df.equals(int_df)

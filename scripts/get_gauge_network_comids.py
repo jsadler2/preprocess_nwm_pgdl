@@ -150,7 +150,7 @@ def str_list_to_series(str_of_list):
     str_of_list = str_of_list.replace(']', ',')
     str_of_list = str_of_list.replace('[', ',')
     str_of_list = str_of_list.split(',')
-    stripped = [a.strip() for a in str_of_list if a != '']
+    stripped = [int(a.strip()) for a in str_of_list if a != '']
     return pd.Series(stripped)
 
 
