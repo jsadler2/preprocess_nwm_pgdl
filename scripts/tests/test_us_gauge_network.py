@@ -5,14 +5,14 @@ import pandas as pd
 toy_sample_csv_num = 'sample_us_comid_file_numbers.csv'
 toy_sample_df_num = pd.read_csv(toy_sample_csv_num, index_col='comid')
 
-real_sample_csv = 'gauge_network_catchments/us_comids-01474500.csv'
+real_sample_csv = '../../data/test/gauge_network_catchments/' \
+                  'us_comids-01474500.csv'
 real_sample_df = pd.read_csv(real_sample_csv, index_col='comid')
 
 
 def test_get_us_comids():
     sample_nwis_comid = '4781847'
-    true_us_comids = ['4781847', '4781845', '4782739', '4781853', '4781857',
-                      '4781859']
+    true_us_comids = [4781847, 4781845, 4782739, 4781853, 4781857, 4781859]
     true_sort = sorted(true_us_comids)
     us_comids = gt.get_upstream_comid_list(sample_nwis_comid)
     us_sort = sorted(us_comids)
@@ -24,11 +24,8 @@ def test_get_nwis_us():
     sample_nwis_comid = 4782017
     true_us_nwis_comids = [4783213, 4783303, 4783101]
     srt_true = sorted(true_us_nwis_comids)
-    all_comids_file = 'gauge_network_catchments/us_comids-01474500.csv'
-    all_comids_df = pd.read_csv(all_comids_file, dtype={'comid': int})
-    all_comids_df.set_index('comid', inplace=True)
 
-    us_nwis_comids = gt.get_us_nwis_comids(sample_nwis_comid, all_comids_df)
+    us_nwis_comids = gt.get_us_nwis_comids(sample_nwis_comid, real_sample_df)
     us_nwis_list = us_nwis_comids.to_list()
     assert sorted(us_nwis_list) == srt_true
 
