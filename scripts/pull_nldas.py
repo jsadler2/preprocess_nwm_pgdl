@@ -3,6 +3,7 @@ from pydap.cas.urs import setup_session
 import pandas as pd
 import xarray as xr
 import time
+import zarr
 import s3fs
 from utils import write_indicator_file
 
@@ -22,6 +23,25 @@ def max_num_dates_done(zarr_store):
 def get_total_time_steps(end_date):
     date_range = pd.date_range(start=minimum_date, end=end_date, freq='H')
     return len(date_range)
+
+
+def delete_last_time_chunk(zarr_store):
+    # read in zarr
+    z = zarr.group(store=zarr_store)
+    # get sizes and time_chunk size
+    time_size = z.time.size
+    time_chunk_size = z.time.chunks[0]
+    new_time_size = time_size - time_chunk_size
+    # delete last time_chunk for each array
+    for a in z.arrays():
+        name, arr = a
+        # only change the sizes (delete chunks) for arrays that aren't lat/lon
+        if name not in ['lat', 'lon']:
+            if arr.shape[0] != time_size:
+                raise ValueError(f'the {name} time dimension does not equal
+                        overall time dimension')
+            arr.resize(new_time_size, arr.shape[1], arr.shape[2])
+
 
 
 def get_undone_range(zarr_store, time_pull_size, end_date):
@@ -110,17 +130,25 @@ def get_urs_pass_user(netrc_file):
 
 if __name__ == '__main__':
 
-    # fs = s3fs.S3FileSystem()
-    # my_bucket = 'esip-nwm-uswest2/'
-    # file_name = f'{my_bucket}nwm-dl/nldas'
-    # s3map = s3fs.S3Map(file_name, s3=fs)
+    fs = s3fs.S3FileSystem()
+    my_bucket = 'ds-drb-data/'
+    file_name = f'{my_bucket}nldas'
+    s3map = s3fs.S3Map(file_name, s3=fs)
 
-    netrc = snakemake.params.netrc_file
-    zarr_store = snakemake.params.zarr_store
-    indicator_file = snakemake.output[0]
+    # netrc = snakemake.params.netrc_file
+    # zarr_store = snakemake.params.zarr_store
+    # indicator_file = snakemake.output[0]
+    zarr_store = s3map
+    time_pull_size= 959
+    lat_chunk = 112
+    lon_chunk = 464
+    time_chunk = 960
+    
 
-    username, password = get_urs_pass_user(netrc)
-    nldas_to_zarr(zarr_store, password, username, time_pull_size=479)
-    write_indicator_file(nldas_to_zarr, indicator_file)
+    username, password = get_urs_pass_user("/home/ec2-user/.netrc")
+    nldas_to_zarr(zarr_store, password, username,
+                  time_pull_size=time_pull_size, lat_chunk=lat_chunk,
+                  lon_chunk=lon_chunk, time_chunk=time_chunk)
+    # write_indicator_file(nldas_to_zarr, indicator_file)
 
 
