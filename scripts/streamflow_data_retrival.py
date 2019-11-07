@@ -7,7 +7,7 @@ import requests
 import xarray as xr
 
 from utils import divide_chunks, get_indices_not_done, \
-    get_site_codes, append_to_csv_column_wise
+    get_site_codes, append_to_csv_column_wise, load_s3_zarr_store
 
 
 def get_all_streamflow_data(output_file, sites_file, huc2=None,
@@ -79,7 +79,8 @@ def write_out_chunks(chunks_dfs, out_file, out_format):
 
     # write the data out to the output file
     if out_format == 'zarr':
-        append_to_zarr(all_chunks_df, out_file)
+        zarr_store = load_s3_zarr_store(out_file)
+        append_to_zarr(all_chunks_df, zarr_store)
     elif out_format == 'csv':
         append_to_csv_column_wise(all_chunks_df, out_file)
     else:

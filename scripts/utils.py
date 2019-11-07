@@ -87,7 +87,7 @@ def divide_chunks(l, n):
 
 def load_s3_zarr_store(s3_zarr_path):
     fs = s3fs.S3FileSystem()
-    zarr_store = s3fs.S3Map(file_name, s3=fs)
+    zarr_store = s3fs.S3Map(s3_zarr_path, s3=fs)
     return zarr_store
 
 
