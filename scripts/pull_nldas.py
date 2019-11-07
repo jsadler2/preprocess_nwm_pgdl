@@ -26,6 +26,12 @@ def get_total_time_steps(end_date):
 
 
 def delete_last_time_chunk(zarr_store):
+    """
+    sometimes the server times out before the entire last time chunk of the
+    NLDAS gets written. So this function is here to delete the possibly
+    problematic (incomplete) most recent time chunk.
+    :param zarr_store: [str or s3fsMap] the nldas zarr store
+    """
     # read in zarr
     z = zarr.group(store=zarr_store)
     # get sizes and time_chunk size
@@ -38,10 +44,12 @@ def delete_last_time_chunk(zarr_store):
         # only change the sizes (delete chunks) for arrays that aren't lat/lon
         if name not in ['lat', 'lon']:
             if arr.shape[0] != time_size:
-                raise ValueError(f'the {name} time dimension does not equal
+                raise ValueError(f'the {name} time dimension does not equal\
                         overall time dimension')
-            arr.resize(new_time_size, arr.shape[1], arr.shape[2])
-
+            if name == 'time':
+                arr.resize(new_time_size)
+            else:
+                arr.resize(new_time_size, arr.shape[1], arr.shape[2])
 
 
 def get_undone_range(zarr_store, time_pull_size, end_date):
