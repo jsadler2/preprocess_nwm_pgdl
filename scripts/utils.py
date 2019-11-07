@@ -120,6 +120,7 @@ def get_indices_done_csv(output_file, dim_name, is_column):
 def check_if_s3_resource_exists(s3_path):
     path_split = s3_path.split("/")
     s3 = boto3.resource('s3')
+    path_split[1] += ('/.zgroup')
     try:
         s3.Object(*path_split).load()
     except botocore.exceptions.ClientError as e:
