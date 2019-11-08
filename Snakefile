@@ -1,4 +1,5 @@
 import scripts.utils as su
+import geopandas as gpd
 from scripts.nwis_comid import get_comids_for_all_nwis_nhd
 import scripts.get_gauge_network_comids as gt
 
@@ -13,11 +14,11 @@ rule all:
     input:
         daily_discharge = expand("{indicator_dir}daily_discharge_huc_{huc}.txt",
                                  huc=HUCS, indicator_dir=indicator_dir),
-        nwis_comid_table = "data/tables/nwis_comid.csv",
+        nwis_comid_table = f"data/tables/nwis_comid.csv",
         nhd_categories = "data/tables/nhd_categories_filtered.csv",
         nldas_indicator = f"{indicator_dir}/nldas_indicator_{nldas_zarr_store_type}.txt",
         nwis_site_list = "data/tables/nwis_site_list_dv.csv",
-        nwis_network_file = f"{data_dir}/nwis_network/dissolved_nwis_network.json"
+        nwis_network_file = f"{data_dir}nwis_network/dissolved_nwis_network.json"
 
 rule get_all_sites:
     output:
@@ -78,7 +79,7 @@ rule us_comids_nwis_network:
     input:
         rules.all.input.nwis_comid_table
     output:
-        f"{data_dir}/nwis_network/upstream_comids.csv"
+        f"{data_dir}nwis_network/upstream_comids_cln.csv"
     run:
         gt.get_upstream_comids_all(output[0])
 
@@ -86,7 +87,7 @@ rule intermediate_nwis_comids:
     input:
         rules.us_comids_nwis_network.output
     output:
-        f"{data_dir}/nwis_network/intermediate_comids.csv"
+        f"{data_dir}nwis_network/intermediate_comids.csv"
     run:
         gt.filter_intermediate(input[0], output[0])
 
@@ -96,4 +97,4 @@ rule dissolve_nwis_network:
     output:
         rules.all.input.nwis_network_file
     run:
-        gt.dissolve_intermediate_all_conus()
+        gt.dissolve_intermediate_all_conus(input[0], output[0])
