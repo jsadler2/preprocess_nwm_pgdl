@@ -2,7 +2,7 @@ import os
 import get_gauge_network_comids as gt
 import pandas as pd
 
-toy_sample_csv_num = 'sample_us_comid_file_numbers.csv'
+toy_sample_csv_num = 'data/sample_us_comid_file_numbers.csv'
 toy_sample_df_num = pd.read_csv(toy_sample_csv_num, index_col='comid')
 
 real_sample_csv = '../../data/test/gauge_network_catchments/' \
