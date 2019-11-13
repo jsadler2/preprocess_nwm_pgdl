@@ -2,10 +2,11 @@ import scripts.utils as su
 import geopandas as gpd
 from scripts.nwis_comid import get_comids_for_all_nwis_nhd
 import scripts.get_gauge_network_comids as gt
+import scripts.weight_grid_nldas as wt
 
 HUCS = [f'{h:02}' for h in range (1, 19)]
 indicator_dir = "data/indicators/"
-data_dir = "D:\\nwm-ml-data\\"
+data_dir = "D:/nwm-ml-data/"
 
 nldas_zarr_store_type = 's3'
 nldas_zarr_store = f"{data_dir}\\nldas\\nldas2"
@@ -93,8 +94,52 @@ rule intermediate_nwis_comids:
 
 rule dissolve_nwis_network:
     input:
+        "D:/nhd/catchments/catchment_buffer_zero.gpkg",
         rules.intermediate_nwis_comids.output
     output:
         rules.all.input.nwis_network_file
     run:
-        gt.dissolve_intermediate_all_conus(input[0], output[0])
+        gdf = gpd.read_file(input[0])
+        print('have read in file')
+        gt.dissolve_intermediate(input[1], gdf, output[0])
+
+rule make_sample_netcdf:
+    input:
+        netrc_file="C:/users/jsadler/.netrc"
+    output:
+        f'{data_dir}weight_grid/sample_nldas.nc'
+    run:
+        wt.make_example_nc(input[0], output[0])
+
+rule make_grid_num_nc:
+    input:
+        rules.make_sample_netcdf.output
+    output:
+        f'{data_dir}weight_grid/grid_num.nc'
+    run:
+        wt.create_grid_num_nc(input[0], output[0])
+
+rule convert_nc_to_geotiff:
+    input:
+        rules.make_grid_num_nc.output
+    output:
+        f'{data_dir}weight_grid/grid_num.tif'
+    run:
+        wt.nc_to_tif(input[0], output[0])
+
+rule convert_tif_to_polygon:
+    input:
+        rules.convert_nc_to_geotiff.output
+    output:
+        f'{data_dir}weight_grid/grid_num.json'
+    run:
+        wt.tif_to_polygon(input[0], output[0])
+
+rule project_grid_vector_to_5070:
+    input:
+        rules.convert_tif_to_polygon.output
+    output:
+        f'{data_dir}weight_grid/grid_num_proj.json'
+    run:
+        wt.project_grid_vector(input[0], output[0], 5070)
+

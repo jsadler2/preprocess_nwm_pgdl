@@ -1,23 +1,81 @@
 import os
 import numpy as np
-from pull_nldas import get_urs_pass_user, connect_to_urs
+from scripts.pull_nldas import get_urs_pass_user, connect_to_urs
+from scripts.utils import convert_df_to_dataset
 import xarray as xr
 import pandas as pd
 import geopandas as gpd
-from osgeo import gdal
+import rioxarray
+from osgeo import gdal, osr, ogr
 import math
 
 
-def make_example_nc(netrc_file_path, data_dir):
+def make_example_nc(netrc_file_path, out_file):
     user, password = get_urs_pass_user(netrc_file_path)
     ds = connect_to_urs(user, password)
-    ds.pressfc[0, :, :].to_netcdf('{}sample_nldas.nc')
+    ds = ds.isel(time=0)
+    ds[['pressfc']].to_netcdf(out_file)
 
 
-# netrc_file = 'C:\\Users\\jsadler\\.netrc'
-# make_example_nc(netrc_file, "../data")
+def create_grid_num_nc(sample_nc_path, out_file):
+    ds = xr.open_dataset(sample_nc_path)
+    lat_num = len(ds.lat)
+    lon_num = len(ds.lon)
+    total_num_grids = lat_num * lon_num
+    num_list = list(range(total_num_grids))
+    num_array = np.array(num_list)
+    num_array = num_array.reshape(lat_num, lon_num)
+    col_name = 'grid_num'
+    ds[col_name] = (('lat', 'lon'), num_array)
+    ds[[col_name]].to_netcdf(out_file)
 
-def calculate_weight_matrix_one_chunk(nhd_catchments, grid_gdf):
+
+def nc_to_tif(nc_file, out_file):
+    ds = xr.open_dataset(nc_file)
+    ds.rio.set_crs('epsg:4326')
+    grid_num_arr = ds['grid_num']
+    grid_num_arr.rio.set_spatial_dims('lon', 'lat', inplace=True)
+    grid_num_arr.rio.to_raster(out_file)
+
+
+def tif_to_polygon(tif_file, polygon_out):
+    """
+    convert a netcdf file into a vector polygon representation of the grid
+    contained in the netcdf file
+    :param tif_file: [str] file path to the tif file
+    :param polygon_out: [str] file path to where the polygon file should be
+    saved
+    :return: None
+    """
+    raster_ds = gdal.Open(tif_file)
+    band = raster_ds.GetRasterBand(1)
+    driver = ogr.GetDriverByName('GeoJSON')
+    out_source = driver.CreateDataSource(polygon_out)
+    outLayer = out_source.CreateLayer("grid")
+    newField = ogr.FieldDefn('grid_num', ogr.OFTInteger)
+    outLayer.CreateField(newField)
+    gdal.Polygonize(band, None, outLayer, 0, [], callback=None)
+    out_source.Destroy()
+    raster_ds = None
+
+
+def project_grid_vector(grid_vector_file, out_file, target_epsg=5070):
+    gdf = gpd.read_file(grid_vector_file)
+    gdf_proj = gdf.to_crs({'init': f'epsg:{target_epsg}'})
+    gdf_proj.to_file(out_file, driver='GeoJSON')
+
+
+def calculate_weight_matrix_one_chunk(nhd_catchments, grid_gdf,
+                                      str_col_names=False):
+    """
+    calculate the weight matrix for a subset (or theoretically all) nhd
+    catchments which are stored in a geodataframe
+    :param nhd_catchments: [geodataframe] (subset of) nhd catchment layer
+    :param grid_gdf: [geodataframe] the grid for which the weight matrix will
+    :param str_col_names: [bool] whether the col names should be converted to
+    a string be calculated
+    :return:
+    """
     # project catchments into same projection as grid
     nhd_catchments_proj = nhd_catchments.to_crs(grid_gdf.crs)
 
@@ -27,31 +85,47 @@ def calculate_weight_matrix_one_chunk(nhd_catchments, grid_gdf):
     inter['weighted_area'] = inter['new_area'] / inter['orig_area']
     matrix_df = inter.pivot(index='FEATUREID', columns='DN',
                             values='weighted_area')
-    # convert all column names to strings (parquet needs str col names)
-    matrix_df.columns = [str(c) for c in matrix_df.columns]
+    if str_col_names:
+        # convert all column names to strings (parquet needs str col names)
+        matrix_df.columns = [str(c) for c in matrix_df.columns]
     return matrix_df
 
 
-def calculate_weight_matrix_chunks(nhd_gdb, grid_file, out_dir):
+def calculate_weight_matrix_chunks(nhd_gdb, grid_file, out_zarr_store):
+    """
+    calculate the weight matrix in chunks for all nhd catchments over a given
+    grid. The output of this is a zarr data store
+    :param nhd_gdb: [str] file path to the nhd geodatabase with the catchment
+    layer
+    :param grid_file: [str] file path to the geometric file that has the grid.
+    This should be a projected, vectorized representation of the grid
+    :param out_zarr_store: [str] path to the output zarr store
+    :return: None
+    """
     grid_gdf = gpd.read_file(grid_file)
 
     layer = 'Catchment'
-    cathment_gdf = gpd.read_file(nhd_gdb, layer=layer)
+    catchment_gdf = gpd.read_file(nhd_gdb, layer=layer)
     print("I've read in all the catchments", flush=True)
-    nrows = cathment_gdf.shape[0]
+    nrows = catchment_gdf.shape[0]
     num_splits = 15
     num_per_chunk = nrows / num_splits
-    file_list = []
     for n in range(num_splits):
-        file_name = f'{out_dir}wgt_matrix_{n}_of_{num_splits}.parquet'
         start_chunk = math.floor(num_per_chunk * n)
         end_chunk = math.floor(num_per_chunk * (n + 1))
         print(f"getting wgt matrix for {start_chunk} to {end_chunk}",
               flush=True)
-        nhd_chunk = cathment_gdf.iloc[start_chunk: end_chunk, :]
+        nhd_chunk = catchment_gdf.iloc[start_chunk: end_chunk, :]
         chunk_wgts = calculate_weight_matrix_one_chunk(nhd_chunk, grid_gdf)
-        chunk_wgts.to_parquet(file_name)
-    return file_list
+        save_zarr(chunk_wgts, out_zarr_store)
+
+
+def save_zarr(chunk_df, out_zarr):
+    col_name = 'nldas_grid_no'
+    idx_name = 'nhd_comid'
+    chunks = {col_name: len(chunk_df.columns), idx_name: len(chunk_df.index)}
+    ds = convert_df_to_dataset(chunk_df, col_name, idx_name, 'weight', chunks)
+    ds.to_zarr(out_zarr, mode='a', append_dim='FEATURE_ID')
 
 
 def chunks_to_float16(chunk_folder):
@@ -145,14 +219,6 @@ def combine_dfs_into_placeholder(placeholder, df_list):
     return placeholder
 
 
-def df_to_ds(df):
-    data_array = xr.DataArray(df.values,
-                              [('comid', df.index),
-                               ('nldas_grid_no', df.columns)])
-    data_set = xr.Dataset({'weight': data_array})
-    return data_set
-
-
 def get_chunked_files_list(chunk_folder):
     file_list = []
     for f in os.listdir(chunk_folder):
@@ -204,22 +270,27 @@ def merge_weight_grid(chunk_folder, all_file_name):
             mini_chunk = d.iloc[start_chunk: end_chunk, :]
             resized = resize_individual_df_cols(all_cols, mini_chunk)
             resized = resized/255.
-            ds = df_to_ds(resized)
-            print(f"writing mini-chunk {start_chunk} to {end_chunk} to zarr",
-                  flush=True)
-            ds.to_zarr(os.path.join(chunk_folder, all_file_name),
-                       append_dim='comid', mode='a')
+            # ds = df_to_ds(resized)
+            # print(f"writing mini-chunk {start_chunk} to {end_chunk} to zarr",
+            #       flush=True)
+            # ds.to_zarr(os.path.join(chunk_folder, all_file_name),
+            #            append_dim='comid', mode='a')
 
 
 if __name__ == '__main__':
-    nhd_gdb = ("D:\\nhd\\NHDPlusV21_NationalData_Seamless_Geodatabase_Lower48_07"
-               "\\NHDPlusNationalData"
-               "\\NHDPlusV21_National_Seamless_Flattened_Lower48.gdb")
+    # nhd_gdb = ("D:\\nhd\\NHDPlusV21_NationalData_Seamless_Geodatabase_Lower48_07"
+    #            "\\NHDPlusNationalData"
+    #            "\\NHDPlusV21_National_Seamless_Flattened_Lower48.gdb")
     # target_dir = ("D:\\nhd\\catchments\\")
     # split_catchment_geojson(nhd_gdb, target_dir)
-    grid_gdb = "../data/nldas_grid_proj.geojson"
-    out_dir = "../data/wgt_matrix_chunks/"
+    # grid_gdb = "../data/nldas_grid_proj.geojson"
+    # out_dir = "../data/wgt_matrix_chunks/"
 
     # calculate_weight_matrix_chunks(nhd_gdb, grid_gdb, out_dir)
-    merge_weight_grid(out_dir, "weight_matrix_all_zarr2")
+    # merge_weight_grid(out_dir, "weight_matrix_all_zarr2")
     # chunks_to_float16(out_dir)
+    # make_example_nc("C:/users/jsadler/.netrc", '../data/')
+    # create_grid_num_nc('../data/sample_nldas.nc', '../data/')
+    # nc_to_polygon('../data/sample_nldas.nc', '../data/polygon.json')
+    # nc_to_polygon('../data/grid_num.nc', '../data/polygon_num2.json')
+    nc_to_tif('../data/grid_num.nc', '../data/')
