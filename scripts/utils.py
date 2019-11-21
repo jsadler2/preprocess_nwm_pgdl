@@ -80,6 +80,9 @@ def get_sites_in_basin(huc):
 
 
 def divide_chunks(l, n):
+    """
+    divide a single list, l, into sublists of size n
+    """
     # looping till length l 
     for i in range(0, len(l), n):
         yield l[i:i + n]
@@ -139,7 +142,7 @@ def check_if_exists(path, s3=False):
     if s3:
         return check_if_s3_resource_exists(path)
     else:
-        return os.path.exists(output_file) 
+        return os.path.exists(path)
 
 
 def get_indices_not_done(output_file, all_indices, dim_name, file_type,
@@ -257,4 +260,15 @@ def read_nwis_comid():
     df = pd.read_csv(nwis_comid_file,
                      dtype={'nwis_site_code': str, 'comid':int})
     return df
+
+
+def convert_df_to_dataset(df, col_name, idx_name, data_name, chunks=None):
+    data_array = xr.DataArray(df.values, [(idx_name, df.index),
+                                          (col_name, df.columns)])
+    data_set = xr.Dataset({data_name: data_array})
+
+    if chunks:
+        data_set = data_set.chunk(chunks)
+    return data_set
+
 
