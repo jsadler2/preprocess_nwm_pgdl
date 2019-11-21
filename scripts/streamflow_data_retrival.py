@@ -50,7 +50,7 @@ def get_all_streamflow_data(output_file, sites_file, huc2=None,
     i = 0
     for site_chunk in site_codes_chunked:
         last_chunk = False
-        if len(site_chunk) < num_sites_per_chunk:
+        if site_chunk[-1] == not_done_sites[-1]:
             last_chunk = True
         streamflow_df_sites = None
         # catch if there is a problem on the server retrieving the data
@@ -141,7 +141,12 @@ def call_nwis_service(sites, start_date, end_date, product):
     request_start_time = datetime.datetime.now()
     print(f"starting request for sites {sites} at {request_start_time}, "
           f"for period {start_date} to {end_date}", flush=True)
-    r = requests.get(url)
+    r = None
+    while not r:
+        try:
+            r = requests.get(url)
+        except:
+            print('there was some problem. trying again')
     request_end_time = datetime.datetime.now()
     request_time = request_end_time - request_start_time
     print(f"took {request_time} to get data for huc {sites}", flush=True)
