@@ -7,7 +7,8 @@ import requests
 import xarray as xr
 
 from utils import divide_chunks, get_indices_not_done, \
-    get_site_codes, append_to_csv_column_wise, load_s3_zarr_store
+    get_site_codes, append_to_csv_column_wise, load_s3_zarr_store,\
+    convert_df_to_dataset
 
 
 def get_all_streamflow_data(output_file, sites_file, huc2=None,
@@ -104,22 +105,13 @@ def get_product_from_time_scale(time_scale):
         raise ValueError("time scale must be '15T', 'T', 'H', or 'D'")
 
 
-def convert_df_to_dataset(streamflow_df):
-    data_array = xr.DataArray(streamflow_df.values,
-                              [('datetime', streamflow_df.index),
-                               ('site_code', streamflow_df.columns)])
-    data_set = xr.Dataset({'streamflow': data_array})
-
-    # chunk
-    time_chunk = len(data_array.datetime)
-    site_code_chunk = len(data_array.site_code)
-    data_set = data_set.chunk({'datetime': time_chunk,
-                               'site_code': site_code_chunk})
-    return data_set
-
-
 def append_to_zarr(streamflow_df, output_zarr):
-    ds = convert_df_to_dataset(streamflow_df)
+    # chunks
+    time_chunk = len(streamflow_df.index)
+    site_code_chunk = len(streamflow_df.columns)
+    ds = convert_df_to_dataset(streamflow_df, 'site_code', 'datetime',
+                               'streamflow', {'datetime': time_chunk,
+                                              'site_code': site_code_chunk})
     ds.to_zarr(output_zarr, append_dim='site_code', mode='a')
 
 

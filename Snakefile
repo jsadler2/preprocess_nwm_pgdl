@@ -7,9 +7,11 @@ import scripts.weight_grid_nldas as wt
 HUCS = [f'{h:02}' for h in range (1, 19)]
 indicator_dir = "data/indicators/"
 data_dir = "D:/nwm-ml-data/"
+nhd_gdb = "D:/nhd/NHDPlusV21_NationalData_Seamless_Geodatabase_Lower48_07/NHDPlusNationalData/NHDPlusV21_National_Seamless_Flattened_Lower48.gdb"
+
 
 nldas_zarr_store_type = 's3'
-nldas_zarr_store = f"{data_dir}\\nldas\\nldas2"
+nldas_zarr_store = f"{data_dir}/nldas/nldas2"
 
 rule all:
     input:
@@ -19,7 +21,7 @@ rule all:
         nhd_categories = "data/tables/nhd_categories_filtered.csv",
         nldas_indicator = f"{indicator_dir}/nldas_indicator_{nldas_zarr_store_type}.txt",
         nwis_site_list = "data/tables/nwis_site_list_dv.csv",
-        nwis_network_file = f"{data_dir}nwis_network/dissolved_nwis_network.json"
+        nwis_network_file = f"{data_dir}nwis_network/dissolved_nwis_network.gpkg"
 
 rule get_all_sites:
     output:
@@ -33,7 +35,7 @@ rule get_daily_discharge:
         rules.get_all_sites.output
     params:
         hucs=HUCS,
-        out_data_files = expand(data_dir+"streamflow_data\\discharge_data_{huc}_daily.csv", huc=HUCS)
+        out_data_files = expand(data_dir+"streamflow_data/discharge_data_{huc}_daily.csv", huc=HUCS)
     output:
         rules.all.input.daily_discharge
     script:
@@ -61,7 +63,7 @@ rule get_nhd_characteristic_subset_list:
 rule nldas_to_zarr_store:
     params:
         zarr_store = nldas_zarr_store,
-        netrc_file = 'C:\\Users\\jsadler\\.netrc'
+        netrc_file = 'C:/Users/jsadler/.netrc'
     output:
         rules.all.input.nldas_indicator
     script:
@@ -92,9 +94,18 @@ rule intermediate_nwis_comids:
     run:
         gt.filter_intermediate(input[0], output[0])
 
+
+rule make_zero_buffer_catchments:
+    input:
+        nhd_gdb
+    output:
+        "D:/nhd/catchments/catchment_buffer_zero.gpkg",
+    run:
+        gt.make_zero_buffer_catchments(input[0], output[0])
+
 rule dissolve_nwis_network:
     input:
-        "D:/nhd/catchments/catchment_buffer_zero.gpkg",
+        rules.make_zero_buffer_catchments.output,
         rules.intermediate_nwis_comids.output
     output:
         rules.all.input.nwis_network_file

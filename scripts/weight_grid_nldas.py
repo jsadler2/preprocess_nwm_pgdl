@@ -1,7 +1,7 @@
 import os
 import numpy as np
-from scripts.pull_nldas import get_urs_pass_user, connect_to_urs
-from scripts.utils import convert_df_to_dataset
+from pull_nldas import get_urs_pass_user, connect_to_urs
+from utils import convert_df_to_dataset, divide_chunks
 import xarray as xr
 import pandas as pd
 import geopandas as gpd
@@ -15,6 +15,29 @@ def make_example_nc(netrc_file_path, out_file):
     ds = connect_to_urs(user, password)
     ds = ds.isel(time=0)
     ds[['pressfc']].to_netcdf(out_file)
+
+
+def make_blank_weight_grid(catchment_ids, grid_ids, out_zarr):
+    catchment_chunk_size = 10000
+    chunked_catchments = divide_chunks(catchment_ids, catchment_chunk_size)
+    i = 0
+    for indices in chunked_catchments:
+        print(f'doing chunk {i}', flush=True)
+        blank = pd.DataFrame(0, index=indices, columns=grid_ids, dtype='float32')
+        col_name = 'nldas_grid_no'
+        idx_name = 'nhd_comid'
+        chunks = {col_name: 10000, idx_name: 30000}
+        ds = convert_df_to_dataset(blank, col_name, idx_name, 'weight',
+                                   chunks)
+        ds.to_zarr(out_zarr, mode='a', append_dim=idx_name)
+
+
+def make_blank_all_comid_nldas(all_comid_file, out_zarr):
+    df = pd.read_csv(all_comid_file)
+    all_comids = df[df.columns[-1]]
+    # nldas has 224 rows and 464 columns
+    nldas_ids = list(range(224*464))
+    make_blank_weight_grid(all_comids, nldas_ids, out_zarr)
 
 
 def create_grid_num_nc(sample_nc_path, out_file):
@@ -65,8 +88,10 @@ def project_grid_vector(grid_vector_file, out_file, target_epsg=5070):
     gdf_proj.to_file(out_file, driver='GeoJSON')
 
 
-def calculate_weight_matrix_one_chunk(nhd_catchments, grid_gdf,
-                                      str_col_names=False):
+def calculate_weight_matrix_one_chunk(nhd_catchments, grid_gdf, polygon_id_col,
+                                      grid_id_col='grid_num',
+                                      str_col_names=False,
+                                      ):
     """
     calculate the weight matrix for a subset (or theoretically all) nhd
     catchments which are stored in a geodataframe
@@ -76,27 +101,47 @@ def calculate_weight_matrix_one_chunk(nhd_catchments, grid_gdf,
     a string be calculated
     :return:
     """
-    # project catchments into same projection as grid
-    nhd_catchments_proj = nhd_catchments.to_crs(grid_gdf.crs)
 
-    nhd_catchments_proj['orig_area'] = nhd_catchments_proj.geometry.area
-    inter = gpd.overlay(grid_gdf, nhd_catchments_proj, how='intersection')
+    # create blank df to populate so that all have the same shape
+    num_grid_cells = grid_gdf.shape[0]
+    blank_df = pd.DataFrame(0, index=nhd_catchments[polygon_id_col],
+                            columns=range(num_grid_cells))
+
+    # get the original area before doing the intersection
+    nhd_catchments['orig_area'] = nhd_catchments.geometry.area
+
+    inter = gpd.overlay(grid_gdf, nhd_catchments, how='intersection')
+
+    # get the area after the intersection
     inter['new_area'] = inter.geometry.area
+
+    # get the weighted area
     inter['weighted_area'] = inter['new_area'] / inter['orig_area']
-    matrix_df = inter.pivot(index='FEATUREID', columns='DN',
+
+    # pivot so we get the weight matrix
+    matrix_df = inter.pivot(index=polygon_id_col, columns=grid_id_col,
                             values='weighted_area')
+
+    # add the weight matrix to the blank
+    matrix_df = blank_df + matrix_df
+
+    # replace any nan with zero
+    matrix_df.fillna(0, inplace=True)
+
     if str_col_names:
         # convert all column names to strings (parquet needs str col names)
         matrix_df.columns = [str(c) for c in matrix_df.columns]
     return matrix_df
 
 
-def calculate_weight_matrix_chunks(nhd_gdb, grid_file, out_zarr_store):
+def calculate_weight_matrix_chunks(polygon_file, grid_file, out_zarr_store,
+                                   num_splits=15, layer=None,
+                                   polygon_id_col='FEATUREID'):
     """
     calculate the weight matrix in chunks for all nhd catchments over a given
     grid. The output of this is a zarr data store
-    :param nhd_gdb: [str] file path to the nhd geodatabase with the catchment
-    layer
+    :param polygon_file: [str] file path to the nhd geodatabase with the
+    catchment layer
     :param grid_file: [str] file path to the geometric file that has the grid.
     This should be a projected, vectorized representation of the grid
     :param out_zarr_store: [str] path to the output zarr store
@@ -104,11 +149,12 @@ def calculate_weight_matrix_chunks(nhd_gdb, grid_file, out_zarr_store):
     """
     grid_gdf = gpd.read_file(grid_file)
 
-    layer = 'Catchment'
-    catchment_gdf = gpd.read_file(nhd_gdb, layer=layer)
-    print("I've read in all the catchments", flush=True)
+    catchment_gdf = gpd.read_file(polygon_file, layer=layer)
+    print("read in all catchments", flush=True)
+    # project catchments into same projection as grid
+    catchment_gdf = catchment_gdf.to_crs(grid_gdf.crs)
+    print("projected all catchments", flush=True)
     nrows = catchment_gdf.shape[0]
-    num_splits = 15
     num_per_chunk = nrows / num_splits
     for n in range(num_splits):
         start_chunk = math.floor(num_per_chunk * n)
@@ -116,16 +162,19 @@ def calculate_weight_matrix_chunks(nhd_gdb, grid_file, out_zarr_store):
         print(f"getting wgt matrix for {start_chunk} to {end_chunk}",
               flush=True)
         nhd_chunk = catchment_gdf.iloc[start_chunk: end_chunk, :]
-        chunk_wgts = calculate_weight_matrix_one_chunk(nhd_chunk, grid_gdf)
+        chunk_wgts = calculate_weight_matrix_one_chunk(nhd_chunk, grid_gdf,
+                                                       polygon_id_col)
         save_zarr(chunk_wgts, out_zarr_store)
 
 
 def save_zarr(chunk_df, out_zarr):
     col_name = 'nldas_grid_no'
     idx_name = 'nhd_comid'
-    chunks = {col_name: len(chunk_df.columns), idx_name: len(chunk_df.index)}
-    ds = convert_df_to_dataset(chunk_df, col_name, idx_name, 'weight', chunks)
-    ds.to_zarr(out_zarr, mode='a', append_dim='FEATURE_ID')
+    chunks = {col_name: 10000, idx_name: 30000}
+    ds = convert_df_to_dataset(chunk_df, col_name, idx_name, 'weight',
+                               chunks)
+    ds.to_zarr(out_zarr, mode='a', append_dim=idx_name)
+
 
 
 def chunks_to_float16(chunk_folder):
@@ -278,9 +327,10 @@ def merge_weight_grid(chunk_folder, all_file_name):
 
 
 if __name__ == '__main__':
-    # nhd_gdb = ("D:\\nhd\\NHDPlusV21_NationalData_Seamless_Geodatabase_Lower48_07"
-    #            "\\NHDPlusNationalData"
-    #            "\\NHDPlusV21_National_Seamless_Flattened_Lower48.gdb")
+    nhd_gdb = (
+        "D:\\nhd\\NHDPlusV21_NationalData_Seamless_Geodatabase_Lower48_07"
+        "\\NHDPlusNationalData"
+        "\\NHDPlusV21_National_Seamless_Flattened_Lower48.gdb")
     # target_dir = ("D:\\nhd\\catchments\\")
     # split_catchment_geojson(nhd_gdb, target_dir)
     # grid_gdb = "../data/nldas_grid_proj.geojson"
@@ -293,4 +343,13 @@ if __name__ == '__main__':
     # create_grid_num_nc('../data/sample_nldas.nc', '../data/')
     # nc_to_polygon('../data/sample_nldas.nc', '../data/polygon.json')
     # nc_to_polygon('../data/grid_num.nc', '../data/polygon_num2.json')
-    nc_to_tif('../data/grid_num.nc', '../data/')
+    # nc_to_tif('../data/grid_num.nc', '../data/')
+    polygon_file = 'D:/nwm-ml-data/nwis_network/dissolved_nwis_cln.gpkg'
+    calculate_weight_matrix_chunks(polygon_file,
+                                   "D:/nwm-ml-data/weight_grid/grid_num_proj.json",
+                                   'D:/nwm-ml-data/weight_grid/weight_grid_dissolved1',
+                                   # layer='Catchment',
+                                   num_splits=10,
+                                   polygon_id_col='dissolve_comid'
+                                   )
+    # make_blank_all_comid_nldas('comids_all.csv', 'D:/nwm-ml-data/weight_grid/weight_grid')

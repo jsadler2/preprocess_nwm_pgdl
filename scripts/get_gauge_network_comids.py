@@ -1,15 +1,15 @@
+import json
 import geopandas as gpd
 from scripts.utils import generate_nldi_url, json_from_nldi_request,\
     read_nwis_comid, get_indices_not_done, divide_chunks
 import pandas as pd
 from json.decoder import JSONDecodeError
 
-# read in the comid/nwis table
-# read in the nwis ids for which we have data
-# get the upstream comids for each nwis comid
-# parse those out of the response
-# write them to a file
-# get the downstream main?
+
+def make_zero_buffer_catchments(nhd_gdb, out_file):
+    nhd_gdf = gpd.read_file(nhd_gdb)
+    nhd_gdf['geometry'] = nhd_gdf.geometry.buffer(0)
+    nhd_gdf.to_file(out_file)
 
 
 def get_us_comid_data(comid):
@@ -92,6 +92,13 @@ def get_upstream_comids_all(out_file, comid_list=None):
         print(f'writing chunk {i}', flush=True)
         combined.set_index('comid', inplace=True)
         combined.to_csv(out_file, mode='a', header=not bool(i))
+    delete_duplicates(out_file)
+
+
+def delete_duplicates(out_file):
+    all_df = pd.read_csv(out_file, index_col='comid')
+    all_df_cln = all_df.drop_duplicates()
+    all_df_cln.to_csv(out_file)
 
 
 def get_all_us_nwis_comids_from_df(comid, all_comid_df):
@@ -191,10 +198,7 @@ def filter_intermediate(us_comid_file, outfile):
     :param outfile: [str] filepath to which the filtered data should be written
     :return: [pandas dataframe] dataframe with intermediate values
     """
-    print(us_comid_file)
-    print(pd.read_csv(us_comid_file))
     df_all = pd.read_csv(us_comid_file, index_col='comid')
-    print(df_all.head())
     intermediate_all = []
     for comid in df_all.index:
         intermediate_comids = get_intermediate_comids(comid, df_all)
@@ -220,11 +224,12 @@ def check_intermediate(intermediate_df):
                          'comids')
 
 
-def dissolve_intermediate(int_comid_file, full_gdf, out_file):
+
+def dissolve_intermediate(inter_comid_file, full_gdf, out_file):
     """
     dissolve the intermediate nhd catchments based on info in the intermediate
     comid file and the full geometry file. Save to a new file (geojson)
-    :param int_comid_file: [str] path to a csv file that contains the
+    :param inter_comid_file: [str] path to a csv file that contains the
     intermediate comid information with one column the 'comid' and the other
     column 'intermediate_comids'
     :param full_geom_file: [geopandas geodataframe] gdf with all the nhd
@@ -233,9 +238,11 @@ def dissolve_intermediate(int_comid_file, full_gdf, out_file):
     will be saved
     :return: [geoppandas geodataframe] gdf with the dissolved catchments
     """
-    int_df = pd.read_csv(int_comid_file)
+    inter_df = pd.read_csv(inter_comid_file)
+    inter_comid_col = 'intermediate_comids'
+    inter_df[inter_comid_col] = inter_df[inter_comid_col].apply(json.loads)
     # explodes converts the list of intermediate comids into their own rows
-    int_ex = int_df.explode('intermediate_comids')
+    int_ex = inter_df.explode('intermediate_comids')
     # set the intermediate_comids as index b/c we will join on that
     int_ex.set_index('intermediate_comids', inplace=True)
     # we name the column dissolve comid b/c we will dissolved based on that
@@ -247,21 +254,20 @@ def dissolve_intermediate(int_comid_file, full_gdf, out_file):
     print("performing dissolve")
     full_gdf_diss = full_gdf.dissolve('dissolve_comid')
     print("writing dissolved file")
-    full_gdf_diss.to_file(out_file, driver='GeoJSON')
+    full_gdf_diss.reset_index(inplace=True)
+    full_gdf_diss.to_file(out_file, driver='GPKG')
     return full_gdf_diss
 
 
-def dissolve_intermediate_all_conus():
+def dissolve_intermediate_all_conus(int_comid_file, outfile):
     nhd_gdb = ("D:\\nhd\\NHDPlusV21_NationalData_Seamless_Geodatabase_Lower48_07"
                "\\NHDPlusNationalData"
                "\\NHDPlusV21_National_Seamless_Flattened_Lower48.gdb")
     layer = 'Catchment'
     cathment_gdf = gpd.read_file(nhd_gdb, layer=layer)
     print("read in nhd catchments")
-    int_comid_file = "../data/tables/upstream_comids.csv"
-    out_file = "../data/dissolved_comids.json"
-    dissolve_intermediate(int_comid_file, cathment_gdf, out_file)
+    dissolve_intermediate(int_comid_file, cathment_gdf, outfile)
 
 
 if __name__ == '__main__':
-    dissolve_intermediate_all_conus()
+    pass
