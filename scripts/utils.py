@@ -148,7 +148,7 @@ def get_indices_not_done(output_file, all_indices, dim_name, file_type,
     if check_if_exists(output_file, s3):
         # get the indices that are done
         if file_type == 'zarr':
-            indices_done = get_indices_done_zarr(output_file, dim_name)
+            indices_done = get_indices_done_zarr(output_file, dim_name, s3=s3)
         elif file_type == 'csv':
             indices_done = get_indices_done_csv(output_file, dim_name,
                                                 is_column)
