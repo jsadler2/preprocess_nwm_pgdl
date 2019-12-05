@@ -28,7 +28,7 @@ rule all:
         nldas_indicator = f"{indicator_dir}/nldas_indicator_{nldas_zarr_store_type}.txt",
         nwis_site_list = "data/tables/nwis_site_list_dv.csv",
         nwis_network_file = f"{data_dir}nwis_network/dissolved_nwis_network.gpkg",
-        nhd_filtered_values = f'{data_dir}nhd_cat_attr/nhd_filtered_values.feather'
+        nhd_filtered_values = f'{data_dir}nhd_cat_attr/nhd_filtered_values.parquet'
 
 rule get_all_sites:
     output:
