@@ -1,8 +1,15 @@
 import scripts.utils as su
 import geopandas as gpd
-from scripts.nwis_comid import get_comids_for_all_nwis_nhd
-import scripts.get_gauge_network_comids as gt
-import scripts.weight_grid_nldas as wt
+
+# add scripts dir to path
+import sys
+scripts_path =  os.path.abspath("scripts/")
+sys.path.insert(0, scripts_path)
+
+from nwis_comid import get_comids_for_all_nwis_nhd
+import get_gauge_network_comids as gt
+import weight_grid_nldas as wt
+from combine_nhd_attr import combine_nhd_files 
 
 HUCS = [f'{h:02}' for h in range (1, 19)]
 indicator_dir = "data/indicators/"
@@ -18,10 +25,10 @@ rule all:
         daily_discharge = expand("{indicator_dir}daily_discharge_huc_{huc}.txt",
                                  huc=HUCS, indicator_dir=indicator_dir),
         nwis_comid_table = f"data/tables/nwis_comid.csv",
-        nhd_categories = "data/tables/nhd_categories_filtered.csv",
         nldas_indicator = f"{indicator_dir}/nldas_indicator_{nldas_zarr_store_type}.txt",
         nwis_site_list = "data/tables/nwis_site_list_dv.csv",
-        nwis_network_file = f"{data_dir}nwis_network/dissolved_nwis_network.gpkg"
+        nwis_network_file = f"{data_dir}nwis_network/dissolved_nwis_network.gpkg",
+        nhd_filtered_values = f'{data_dir}nhd_cat_attr/nhd_filtered_values.feather'
 
 rule get_all_sites:
     output:
@@ -56,7 +63,7 @@ rule get_nhd_characteristic_subset_list:
         metadata_file="data/raw/nhd_characteristics_metadata_table.csv",
         exclude_file="data/tables/nhd_categories_to_exclude.yml"
     output:
-        rules.all.input.nhd_categories
+        "data/tables/nhd_categories_filtered.csv",
     script:
         "scripts/get_nhd_characteristic_list.py"
 
@@ -154,3 +161,10 @@ rule project_grid_vector_to_5070:
     run:
         wt.project_grid_vector(input[0], output[0], 5070)
 
+rule combine_filtered_nhd_attributes:
+    input:
+        rules.get_nhd_characteristic_subset_list.output
+    output:
+        rules.all.input.nhd_filtered_values
+    run:
+        combine_nhd_files(output[0])
