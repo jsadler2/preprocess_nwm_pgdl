@@ -244,20 +244,27 @@ def make_nwis_sites_list(data_file, out_file):
         f.write("\n".join(df.columns[1:].to_list()))
 
 
+def get_abs_path(rel_path):
+    """
+    get the absolute path from the path relative to the script
+    :param rel_path:[str] the path relative the utils script 
+    :return: [str] absolute path of the file
+    """
+    split_path = rel_path.split('/')
+    data_path = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                *split_path))
+    return data_path
+
+
 def read_nwis_sites_list():
-    data_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
-                                             'data', 'tables',
-                                             'nwis_site_list_dv.csv'))
+    data_path = get_abs_path('../data/tables/nwis_site_list_dv.csv')
     data = pd.read_csv(data_path, header=None, dtype='str')
     return data
 
 
 def read_nwis_comid():
-    nwis_comid_file = os.path.abspath(os.path.join(
-        os.path.dirname(__file__), '..', 'data', 'tables',
-        'nwis_comid.csv'))
-
-    df = pd.read_csv(nwis_comid_file,
+    data_path = get_abs_path('../data/tables/nwis_comid.csv')
+    df = pd.read_csv(data_path,
                      dtype={'nwis_site_code': str, 'comid':int})
     return df
 
