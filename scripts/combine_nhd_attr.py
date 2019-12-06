@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 from utils import get_abs_path
+from get_gauge_network_comids import format_intermediate
 
 
 def get_all_feather_files():
@@ -58,7 +59,7 @@ def get_categories_in_feather(nhd_cats, columns):
     return in_cats
 
 
-def combine_nhd_files(out_file):
+def filter_combine_nhd_files(out_file):
     """
     combine attributes from a bunch of feather files that contain all of the 
     nhd catchment attributes into one file. only select attributes are combined
@@ -81,4 +82,24 @@ def combine_nhd_files(out_file):
     df_combined = df_combined.reset_index()
     df_combined.to_parquet(out_file)
     return df_combined
+
+
+def combine_attr_to_nwis_net(nwis_inter_net, filt_comb_nhd, out_file):
+    """
+    consolidate the intermediate catchment attributes for the nwis network
+    :param nwis_inter_net:[str] path to the nwis intermediate network csv file.
+    this file should have two columns:'comid' and 'intermediate_comid'
+    :param filt_comb_nhd:[str] path to the filtered, combined nhd catchment
+    attributes parquet file
+    :param out_file:[str] path to where the consolidated data should be written
+    :returns: none
+    """
+    inter_df = pd.read_csv(nwis_inter_net)
+    inter_df = format_intermediate(inter_df)
+
+    nhd_df = pd.read_parquet(filt_comb_nhd)
+    nhd_df.set_index('COMID', inplace=True)
+    inter_df = inter_df.join(nhd_df)
+    inter_df = inter_df.groupby('dissolve_comid').mean()
+    inter_df.to_parquet(out_file)
 

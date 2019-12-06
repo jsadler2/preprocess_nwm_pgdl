@@ -9,7 +9,8 @@ sys.path.insert(0, scripts_path)
 from nwis_comid import get_comids_for_all_nwis_nhd
 import get_gauge_network_comids as gt
 import weight_grid_nldas as wt
-from combine_nhd_attr import combine_nhd_files 
+from combine_nhd_attr import filter_combine_nhd_files, combine_attr_to_nwis_net 
+from utils import write_indicator_file
 
 HUCS = [f'{h:02}' for h in range (1, 19)]
 indicator_dir = "data/indicators/"
@@ -28,7 +29,9 @@ rule all:
         nldas_indicator = f"{indicator_dir}/nldas_indicator_{nldas_zarr_store_type}.txt",
         nwis_site_list = "data/tables/nwis_site_list_dv.csv",
         nwis_network_file = f"{data_dir}nwis_network/dissolved_nwis_network.gpkg",
-        nhd_filtered_values = f'{data_dir}nhd_cat_attr/nhd_filtered_values.parquet'
+        nhd_filtered_values = f'{data_dir}nhd_cat_attr/nhd_filtered_values.parquet',
+        weight_grid = f'{indicator_dir}weight_matrix_nwis_net',
+        nhd_nwis_net = f'{data_dir}nwis_network/nwis_nhd_attr.parquet'
 
 rule get_all_sites:
     output:
@@ -161,10 +164,35 @@ rule project_grid_vector_to_5070:
     run:
         wt.project_grid_vector(input[0], output[0], 5070)
 
+# todo: add rule for making the "clean" version of the dissolved nwis. 
+# I originally did this using a gui function in QGIS
+
+rule weight_matrix_nwis_net:
+    input:
+        polygon_file = f'{data_dir}/nwis_network/dissolved_nwis_cln.gpkg',
+        grid = rules.project_grid_vector_to_5070.output
+    output:
+        rules.all.input.weight_grid
+    run:
+        out_zarr = f'{data_dir}weight_grid/nwis_net_weight_grid'
+        wt.calculate_weight_matrix_chunks(input[0], input[1], out_zarr,
+                                         num_splits=10,
+                                         polygon_id_col='dissolve_comid')
+        write_indicator_file(wt.calculate_weight_matrix_chunks, output[0])
+
 rule combine_filtered_nhd_attributes:
     input:
         rules.get_nhd_characteristic_subset_list.output
     output:
         rules.all.input.nhd_filtered_values
     run:
-        combine_nhd_files(output[0])
+        filter_combine_nhd_files(output[0])
+
+rule consolidate_nhd_attr_to_nwis_net:
+    input:
+        rules.intermediate_nwis_comids.output,
+        rules.combine_filtered_nhd_attributes.output
+    output:
+        rules.all.input.nhd_nwis_net
+    run:
+        combine_attr_to_nwis_net(input[0], input[1], output[0])
