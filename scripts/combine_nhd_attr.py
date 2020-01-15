@@ -1,4 +1,5 @@
 import os
+import re
 import pandas as pd
 from utils import get_abs_path
 from get_gauge_network_comids import format_intermediate
@@ -59,15 +60,17 @@ def get_categories_in_feather(nhd_cats, columns):
     return in_cats
 
 
-def filter_combine_nhd_files(out_file):
+def filter_combine_nhd_files(out_file, filtered=True):
     """
     combine attributes from a bunch of feather files that contain all of the 
-    nhd catchment attributes into one file. only select attributes are combined
-    however, and these attributes are specified in a
+    nhd catchment attributes into one file. By default, only select attributes
+    are combined. These attributes are specified in a
     "nhd_categories_filtered.csv" file and read in via the
     'read_nhd_categories' method. The filtered and combined dataframe is 
-    written to a parquet file
+    written to a parquet file. If the filtered flag is False, *all* of the 
+    attributes are combined.
     :param out_file:[str] path to where the output file should be written
+    :param filtered:[str] whether or not to filter out any attributes
     :returns: [pandas df] combined and filtered pandas dataframe
     """
     feather_files = get_all_feather_files()
@@ -76,12 +79,35 @@ def filter_combine_nhd_files(out_file):
     for feather_file in feather_files:
         df = pd.read_feather(feather_file)
         df.set_index('COMID', inplace=True)
-        cols = get_categories_in_feather(nhd_cats, df.columns)
+        if filtered:
+            cols = get_categories_in_feather(nhd_cats, df.columns)
+        else:
+            cols = df.columns
         if len(cols) > 0:
             df_combined[cols] = df[cols]
     df_combined = df_combined.reset_index()
     df_combined.to_parquet(out_file)
     return df_combined
+
+
+def filter_dam_variables(all_variables):
+    dam_words = ['MAJOR', 'NDAMS', 'NORM_STORAGE', 'NID_STORAGE']
+    regexs = ['CAT_{word}\d{{4}}'.format(word=word) for word in dam_words]
+    compiled_regex = re.compile('|'.join(regexs))
+    filtered = list(filter(compiled_regex.search, all_variables))
+    return filtered
+
+
+def variables_to_sum(all_variables):
+    """
+    filter the variables to sum rather than average when consolidating
+    :param all_variables: [list like] list of all variables
+    :return: [list] list of variables that should be summed
+    """
+    master_list = []
+    master_list.append('CAT_BASIN_AREA')
+    master_list.extend(filter_dam_variables(all_variables))
+    return master_list
 
 
 def combine_attr_to_nwis_net(nwis_inter_net, filt_comb_nhd, out_file):
@@ -100,6 +126,14 @@ def combine_attr_to_nwis_net(nwis_inter_net, filt_comb_nhd, out_file):
     nhd_df = pd.read_parquet(filt_comb_nhd)
     nhd_df.set_index('COMID', inplace=True)
     inter_df = inter_df.join(nhd_df)
-    inter_df = inter_df.groupby('dissolve_comid').mean()
-    inter_df.to_parquet(out_file)
+    # sum some of the variables
+    vars_to_sum = variables_to_sum(inter_df.columns)
+    vars_to_sum.append('dissolve_comid')
+    combined_sum = inter_df[vars_to_sum].groupby('dissolve_comid').sum()
+    vars_to_sum.remove('dissolve_comid')
+    # take the mean of the rest (most) 
+    combined = inter_df.groupby('dissolve_comid').mean()
+    #replace the means with the sums for the vars_to_sum
+    combined.loc[:, vars_to_sum] = combined_sum.loc[:, vars_to_sum]
+    combined.to_parquet(out_file)
 

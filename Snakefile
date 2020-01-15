@@ -196,3 +196,17 @@ rule consolidate_nhd_attr_to_nwis_net:
         rules.all.input.nhd_nwis_net
     run:
         combine_attr_to_nwis_net(input[0], input[1], output[0])
+
+rule combine_all_nhd_attributes:
+    output:
+        f"{data_dir}nhd_cat_attr/nhd_all_cat_attr.parquet"
+    run:
+        filter_combine_nhd_files(output[0], filtered=False)
+
+rule nwis_nhd:
+    input:
+        nhd_gdb
+    output:
+        f"{data_dir}nwis_network/nhd_nwis_gages.json"
+    run:
+        gt.get_nhd_gages_in_nwis(input[0], output[0])

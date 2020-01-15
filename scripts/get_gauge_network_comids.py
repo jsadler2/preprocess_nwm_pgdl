@@ -1,7 +1,7 @@
 import json
 import geopandas as gpd
 from scripts.utils import generate_nldi_url, json_from_nldi_request,\
-    read_nwis_comid, get_indices_not_done, divide_chunks
+    read_nwis_comid, get_indices_not_done, divide_chunks, read_nwis_sites_list
 import pandas as pd
 from json.decoder import JSONDecodeError
 
@@ -309,5 +309,11 @@ def dissolve_intermediate_all_conus(int_comid_file, outfile):
     dissolve_intermediate(int_comid_file, cathment_gdf, outfile)
 
 
-if __name__ == '__main__':
-    pass
+def get_nhd_gages_in_nwis(nhd_gdb, outfile):
+    sites = read_nwis_sites_list()
+    gdf = gpd.read_file(nhd_gdb, layer='Gage')
+    gdf.set_index('SOURCE_FEA', inplace=True)
+    gdf_filt = gdf.loc[sites[0]]
+    gdf_filt.reset_index(inplace=True)
+    gdf_filt.to_file(outfile, driver='GeoJSON')
+
