@@ -53,6 +53,8 @@ def delete_last_time_chunk(zarr_store):
 
 
 def get_undone_range(zarr_store, time_pull_size, end_date):
+    print('deleting last time chunk')
+    delete_last_time_chunk(zarr_store)
     num_total_dt_steps = get_total_time_steps(end_date)
     max_date_num = max_num_dates_done(zarr_store)
     if max_date_num:
@@ -156,7 +158,7 @@ if __name__ == '__main__':
     username, password = get_urs_pass_user("/home/ec2-user/.netrc")
     nldas_to_zarr(zarr_store, password, username,
                   time_pull_size=time_pull_size, lat_chunk=lat_chunk,
-                  lon_chunk=lon_chunk, time_chunk=time_chunk)
+                  lon_chunk=lon_chunk, time_chunk=time_chunk, end_date='2020-12-31')
     # write_indicator_file(nldas_to_zarr, indicator_file)
 
 

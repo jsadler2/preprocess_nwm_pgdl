@@ -138,7 +138,7 @@ def call_nwis_service(sites, start_date, end_date, product):
         try:
             r = requests.get(url)
         except:
-            print('there was some problem. trying again')
+            print('there was some problem. trying again', flush=True)
     request_end_time = datetime.datetime.now()
     request_time = request_end_time - request_start_time
     print(f"took {request_time} to get data for huc {sites}", flush=True)

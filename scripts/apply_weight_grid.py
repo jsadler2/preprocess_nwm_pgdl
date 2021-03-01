@@ -1,4 +1,5 @@
 # coding: utf-8
+import s3fs
 import xarray as xr
 
 
@@ -12,7 +13,6 @@ def apply_nldas_weight_grid(weight_grid_zarr, dataset_zarr, out_store):
     for var_name in ds_nldas_st._variables:
         if var_name not in ('time', 'nldas_grid_no'):
             var_array = ds_nldas_st[var_name]
-            print(type(var_array))
             var_array = var_array.fillna(0)
             var_array = w.dot(var_array)
             data_dict[var_name] = var_array
@@ -20,8 +20,13 @@ def apply_nldas_weight_grid(weight_grid_zarr, dataset_zarr, out_store):
     weigheted_ds.to_zarr(out_store)
 
 if __name__ == "__main__":
-    weight_grid_store = "D:/nwm-ml-data/weight_grid/weight_grid_dissolved1"
-    nldas_store = "D:/nwm-ml-data/nldas/nldas2"
-    out_store = "D:/nwm-ml-data/weight_grid/dissolved_nldas"
+    
+    fs = s3fs.S3FileSystem()
+    nldas_data_path = 'ds-drb-data/nldas_daily_sum_precip'
+    nldas_store = s3fs.S3Map(nldas_data_path, s3=fs)
+    out_path = 'ds-drb-data/nldas_weighted_nwis_dissolved'
+    out_store = s3fs.S3Map(out_path, s3=fs)
+
+    weight_grid_store = "/home/ec2-user/weight_grid_dissolved1"
     apply_nldas_weight_grid(weight_grid_store, nldas_store, out_store)
 
