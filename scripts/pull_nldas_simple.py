@@ -3,8 +3,8 @@ import xarray as xr
 import time
 import s3fs
 
-username = 'jsadler'
-password = 'rmX9YgFpxetSoyuxo1Dv'
+username = 'your username'
+password = 'your password'
 
 
 def pull_nldas_all_at_once(zarr_store):

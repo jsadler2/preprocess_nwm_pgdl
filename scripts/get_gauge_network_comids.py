@@ -1,7 +1,7 @@
 import json
 import geopandas as gpd
 from scripts.utils import generate_nldi_url, json_from_nldi_request,\
-    read_nwis_comid, get_indices_not_done, divide_chunks
+    read_nwis_comid, get_indices_not_done, divide_chunks, read_nwis_sites_list
 import pandas as pd
 from json.decoder import JSONDecodeError
 
@@ -224,6 +224,53 @@ def check_intermediate(intermediate_df):
                          'comids')
 
 
+def explode_intermediate(inter_df):
+    """
+    explode the 'intermediate_comid' col but first convert from a str to a list
+    """
+    inter_comid_col = 'intermediate_comids'
+    inter_df[inter_comid_col] = inter_df[inter_comid_col].apply(json.loads)
+    # explodes converts the list of intermediate comids into their own rows
+    int_ex = inter_df.explode('intermediate_comids')
+    return int_ex
+
+
+def format_intermediate(inter_df):
+    """
+    takes a dataframe with columns 'comid' and 'intermediate_comids' where
+    the comid is a comid with an nwis station and the 'intermediate_comids' are
+    upstream comids between the given 'nwis comid' and the next upstream 'nwis
+    'comid'. This function transforms that into a df with 'intermediate_comids'
+    as the index and 'dissolve_comid' is the comid that the
+    'intermediate_comid' should be dissolved into.
+    :param inter_df:[pandas df] dataframe for intermediate comids
+    :return:[pandas df] reformated df
+    ---
+    example 
+    ---
+    before:
+    comid, intermediate_comids
+    1, '[1, 2, 3]'
+    4, '[4, 5, 11, 18]'
+
+    after:
+    intermediate_comids, dissolve_comid
+    1, 1
+    2, 1
+    3, 1
+    4, 4
+    5, 4
+    11, 4
+    18, 4
+    """
+    int_ex = explode_intermediate(inter_df)
+    # set the intermediate_comids as index b/c we will join on that
+    int_ex.set_index('intermediate_comids', inplace=True)
+    # we name the column dissolve comid b/c we will dissolved based on that
+    int_ex.columns = ['dissolve_comid']
+    return int_ex
+
+
 
 def dissolve_intermediate(inter_comid_file, full_gdf, out_file):
     """
@@ -239,14 +286,7 @@ def dissolve_intermediate(inter_comid_file, full_gdf, out_file):
     :return: [geoppandas geodataframe] gdf with the dissolved catchments
     """
     inter_df = pd.read_csv(inter_comid_file)
-    inter_comid_col = 'intermediate_comids'
-    inter_df[inter_comid_col] = inter_df[inter_comid_col].apply(json.loads)
-    # explodes converts the list of intermediate comids into their own rows
-    int_ex = inter_df.explode('intermediate_comids')
-    # set the intermediate_comids as index b/c we will join on that
-    int_ex.set_index('intermediate_comids', inplace=True)
-    # we name the column dissolve comid b/c we will dissolved based on that
-    int_ex.columns = ['dissolve_comid']
+    inter_df = format_intermediate(inter_df)
     # set the index as the comid
     full_gdf.set_index('FEATUREID', inplace=True)
 
@@ -269,5 +309,11 @@ def dissolve_intermediate_all_conus(int_comid_file, outfile):
     dissolve_intermediate(int_comid_file, cathment_gdf, outfile)
 
 
-if __name__ == '__main__':
-    pass
+def get_nhd_gages_in_nwis(nhd_gdb, outfile):
+    sites = read_nwis_sites_list()
+    gdf = gpd.read_file(nhd_gdb, layer='Gage')
+    gdf.set_index('SOURCE_FEA', inplace=True)
+    gdf_filt = gdf.loc[sites[0]]
+    gdf_filt.reset_index(inplace=True)
+    gdf_filt.to_file(outfile, driver='GeoJSON')
+

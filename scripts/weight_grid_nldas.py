@@ -319,37 +319,4 @@ def merge_weight_grid(chunk_folder, all_file_name):
             mini_chunk = d.iloc[start_chunk: end_chunk, :]
             resized = resize_individual_df_cols(all_cols, mini_chunk)
             resized = resized/255.
-            # ds = df_to_ds(resized)
-            # print(f"writing mini-chunk {start_chunk} to {end_chunk} to zarr",
-            #       flush=True)
-            # ds.to_zarr(os.path.join(chunk_folder, all_file_name),
-            #            append_dim='comid', mode='a')
 
-
-if __name__ == '__main__':
-    nhd_gdb = (
-        "D:\\nhd\\NHDPlusV21_NationalData_Seamless_Geodatabase_Lower48_07"
-        "\\NHDPlusNationalData"
-        "\\NHDPlusV21_National_Seamless_Flattened_Lower48.gdb")
-    # target_dir = ("D:\\nhd\\catchments\\")
-    # split_catchment_geojson(nhd_gdb, target_dir)
-    # grid_gdb = "../data/nldas_grid_proj.geojson"
-    # out_dir = "../data/wgt_matrix_chunks/"
-
-    # calculate_weight_matrix_chunks(nhd_gdb, grid_gdb, out_dir)
-    # merge_weight_grid(out_dir, "weight_matrix_all_zarr2")
-    # chunks_to_float16(out_dir)
-    # make_example_nc("C:/users/jsadler/.netrc", '../data/')
-    # create_grid_num_nc('../data/sample_nldas.nc', '../data/')
-    # nc_to_polygon('../data/sample_nldas.nc', '../data/polygon.json')
-    # nc_to_polygon('../data/grid_num.nc', '../data/polygon_num2.json')
-    # nc_to_tif('../data/grid_num.nc', '../data/')
-    polygon_file = 'D:/nwm-ml-data/nwis_network/dissolved_nwis_cln.gpkg'
-    calculate_weight_matrix_chunks(polygon_file,
-                                   "D:/nwm-ml-data/weight_grid/grid_num_proj.json",
-                                   'D:/nwm-ml-data/weight_grid/weight_grid_dissolved1',
-                                   # layer='Catchment',
-                                   num_splits=10,
-                                   polygon_id_col='dissolve_comid'
-                                   )
-    # make_blank_all_comid_nldas('comids_all.csv', 'D:/nwm-ml-data/weight_grid/weight_grid')
