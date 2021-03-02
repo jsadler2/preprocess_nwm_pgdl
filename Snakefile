@@ -12,20 +12,35 @@ scripts_path =  os.path.abspath("scripts/")
 sys.path.insert(0, scripts_path)
 
 import weight_grid_nldas as wt
+from apply_weight_grid import apply_nldas_weight_grid
 
 out_dir = "nwm_dl_data"
 
 
+def filter_zattrs_io(orig):
+    filtered = []
+    for filename in orig:
+        if os.path.split(filename)[1] == '.zattrs':
+            filtered.append(os.path.split(filename)[0])
+        else:
+            filtered.append(filename)
+    return filtered
+
+def filter_zattrs(inputs, outputs):
+    return filter_zattrs_io(inputs), filter_zattrs_io(outputs)
+
+
 rule all:
     input:
-        weight_grid = f'{indicator_dir}weight_matrix_nwis_net',
+        S3.remote(f'ds-drb-data/{out_dir}/taylor_river_drivers/.zattrs')
 
 rule make_sample_netcdf:
     input:
-        S3.remote("ds-drb-data/nldas"),
+        S3.remote("ds-drb-data/nldas/.zattrs"),
     output:
         S3.remote(f"ds-drb-data/{out_dir}/weight_grid/sample.nc"),
     run:
+        input, output = filter_zattrs(input, output)
         wt.make_example_nc(input[0], output[0])
 
 rule make_grid_num_nc:
@@ -62,15 +77,21 @@ rule project_grid_vector_to_5070:
 
 rule weight_matrix:
     input:
-        S3.remote(f'ds-drb-data/{out_dir}/weight_grid/grid_num_proj.json')
-        polygon_file = f'{data_dir}/nwis_network/dissolved_nwis_cln.gpkg',
-        grid = rules.project_grid_vector_to_5070.output
+        S3.remote(f'ds-drb-data/taylor_river_nhd_catchments.geojson'),
+        S3.remote(f'ds-drb-data/{out_dir}/weight_grid/grid_num_proj.json'),
     output:
-        rules.all.input.weight_grid
+        S3.remote(f'ds-drb-data/{out_dir}/weight_grid/taylor_river_weight_grid/.zattrs')
     run:
-        out_zarr = f'{data_dir}weight_grid/nwis_net_weight_grid'
-        wt.calculate_weight_matrix_chunks(input[0], input[1], out_zarr,
-                                         num_splits=10,
-                                         polygon_id_col='dissolve_comid')
-        write_indicator_file(wt.calculate_weight_matrix_chunks, output[0])
+        input, output = filter_zattrs(input, output)
+        wt.calculate_weight_matrix_chunks(input[0], input[1], output[0],
+                                         num_splits=1)
 
+rule apply_weight_matrix:
+    input:
+        S3.remote(f'ds-drb-data/{out_dir}/weight_grid/taylor_river_weight_grid/.zattrs'),
+        S3.remote("ds-drb-data/nldas/.zattrs"),
+    output:
+        S3.remote(f'ds-drb-data/{out_dir}/taylor_river_drivers/.zattrs')
+    run:
+        input, output = filter_zattrs(input, output)
+        apply_nldas_weight_grid(input[0], input[1], output[0])
