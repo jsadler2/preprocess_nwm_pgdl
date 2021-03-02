@@ -7,12 +7,19 @@ import pandas as pd
 import geopandas as gpd
 import rioxarray
 from osgeo import gdal, osr, ogr
+import s3fs
+import datetime
+from dateutil import tz
 import math
 
 
-def make_example_nc(netrc_file_path, out_file):
-    user, password = get_urs_pass_user(netrc_file_path)
-    ds = connect_to_urs(user, password)
+def make_example_nc(nldas_path, out_file):
+    if os.path.split(nldas_path)[1] == '.zattrs':
+        nldas_path = os.path.split(nldas_path)[0]
+
+    fs = s3fs.S3FileSystem(profile='ds-drb-creds', anon=False)
+    nldas_path = s3fs.S3Map(nldas_path, s3=fs)
+    ds = xr.open_zarr(nldas_path)
     ds = ds.isel(time=0)
     ds[['pressfc']].to_netcdf(out_file)
 
@@ -58,7 +65,7 @@ def nc_to_tif(nc_file, out_file):
     ds.rio.set_crs('epsg:4326')
     grid_num_arr = ds['grid_num']
     grid_num_arr.rio.set_spatial_dims('lon', 'lat', inplace=True)
-    grid_num_arr.rio.to_raster(out_file)
+    grid_num_arr.rio.to_raster(out_file, dtype=np.int32)
 
 
 def tif_to_polygon(tif_file, polygon_out):
@@ -84,7 +91,7 @@ def tif_to_polygon(tif_file, polygon_out):
 
 def project_grid_vector(grid_vector_file, out_file, target_epsg=5070):
     gdf = gpd.read_file(grid_vector_file)
-    gdf_proj = gdf.to_crs({'init': f'epsg:{target_epsg}'})
+    gdf_proj = gdf.to_crs(5070)
     gdf_proj.to_file(out_file, driver='GeoJSON')
 
 
@@ -119,11 +126,14 @@ def calculate_weight_matrix_one_chunk(nhd_catchments, grid_gdf, polygon_id_col,
     inter['weighted_area'] = inter['new_area'] / inter['orig_area']
 
     # pivot so we get the weight matrix
+    print(inter)
     matrix_df = inter.pivot(index=polygon_id_col, columns=grid_id_col,
                             values='weighted_area')
+    print(matrix_df)
 
     # add the weight matrix to the blank
     matrix_df = blank_df + matrix_df
+    print(matrix_df)
 
     # replace any nan with zero
     matrix_df.fillna(0, inplace=True)
@@ -173,7 +183,11 @@ def save_zarr(chunk_df, out_zarr):
     chunks = {col_name: 10000, idx_name: 30000}
     ds = convert_df_to_dataset(chunk_df, col_name, idx_name, 'weight',
                                chunks)
-    ds.to_zarr(out_zarr, mode='a', append_dim=idx_name)
+    print(ds)
+    print(out_zarr)
+    fs = s3fs.S3FileSystem(profile='ds-drb-creds', anon=False)
+    out_zarr = s3fs.S3Map(out_zarr, s3=fs)
+    ds.to_zarr(out_zarr, mode='w')
 
 
 
