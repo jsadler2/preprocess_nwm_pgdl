@@ -8,16 +8,17 @@ dependencies:
   - dask
   - dask-core
  # - gdal
+  - geopandas
+  - ipykernel
   - lxml
   - netcdf4
-  - numpy
   - pandas
   - pip
+  - prefect
   - pyarrow
   - pytz
   - s3fs
-  - snakemake-minimal
-  - xarray=0.12.2
+  - xarray 
   - zarr
   - pip:
       git+https://github.com/pydap/pydap.git
